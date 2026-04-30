@@ -1,0 +1,10 @@
+analyzer:
+  exclude:
+    - build/**
+    - linux/flutter/ephemeral/**
+    - windows/flutter/ephemeral/**
+
+linter:
+  rules:
+    avoid_print: true
+    use_build_context_synchronously: false
