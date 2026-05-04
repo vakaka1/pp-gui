@@ -63,7 +63,6 @@ class _HomePageState extends State<HomePage> {
   bool _loading = true;
   bool _busy = false;
   bool _shaperEnabled = true;
-  bool _fullTunnelRequested = false;
   bool _fullTunnelActive = false;
   bool _installing = false;
   bool _verboseLogs = false;
@@ -459,21 +458,20 @@ class _HomePageState extends State<HomePage> {
     setState(() {
       _tunnelState = TunnelState.starting;
       _serverConnected = false;
+      _fullTunnelActive = false;
       _stopRequested = false;
-      _status = 'Подключение к серверу';
+      _status = 'Запуск';
     });
 
     try {
-      final transparentListen =
-          _fullTunnelRequested ? _transparentListen.text.trim() : null;
       final process = await _ppClient.start(
         binary,
         profile,
         verbose: _verboseLogs,
-        transparentListen: transparentListen,
       );
       _clientProcess = process;
-      _appendLog('pp-client запущен, pid=${process.pid}');
+      _appendLog(
+          'pp-client start --full-tunnel ${profile.name} запущен, pid=${process.pid}');
 
       _stdoutSub = process.stdout
           .transform(utf8.decoder)
@@ -503,13 +501,10 @@ class _HomePageState extends State<HomePage> {
             _status = 'Не удалось подключиться к серверу';
           }
           _serverConnected = false;
+          _fullTunnelActive = false;
           _stopRequested = false;
         });
       }));
-
-      if (_fullTunnelRequested) {
-        await _enableFullTunnel();
-      }
     } on Object catch (error) {
       _appendLog('ошибка запуска: $error');
       setState(() {
@@ -520,19 +515,11 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _stopClient() async {
-    final binary = _binary;
     setState(() {
       _tunnelState = TunnelState.stopping;
       _stopRequested = true;
       _status = 'Остановка туннеля';
     });
-    if (_fullTunnelActive && binary != null && binary.installed) {
-      final result = await _ppClient.fullTunnelDown(binary);
-      _appendLog(result.ok
-          ? 'Полный туннель отключён'
-          : 'не удалось отключить полный туннель: ${result.combinedOutput}');
-      _fullTunnelActive = false;
-    }
     _clientProcess?.kill(ProcessSignal.sigterm);
     await Future<void>.delayed(const Duration(milliseconds: 250));
     if (mounted && _clientProcess == null) {
@@ -540,40 +527,6 @@ class _HomePageState extends State<HomePage> {
         _tunnelState = TunnelState.stopped;
         _status = 'Остановлено';
       });
-    }
-  }
-
-  Future<void> _enableFullTunnel() async {
-    final binary = _binary;
-    final profile = _selectedProfile;
-    if (binary == null ||
-        !binary.installed ||
-        profile == null ||
-        !binary.canFullTunnel) {
-      _appendLog('Полный туннель недоступен в этой версии pp-client');
-      return;
-    }
-    final result = await _ppClient.fullTunnelUp(
-      binary,
-      profile,
-      transparentListen: _transparentListen.text,
-      owner: _fullTunnelOwner.text,
-    );
-    if (result.ok) {
-      setState(() {
-        _fullTunnelActive = true;
-      });
-      _appendLog('Полный туннель включён');
-    } else {
-      _appendLog(
-          'не удалось включить полный туннель: ${result.combinedOutput}');
-      _showSnack('Не удалось включить полный туннель');
-      if (mounted) {
-        setState(() {
-          _tunnelState = TunnelState.error;
-          _status = 'Полный туннель не включён';
-        });
-      }
     }
   }
 
@@ -760,8 +713,14 @@ class _HomePageState extends State<HomePage> {
         'browser noise pre-connect scenario completed successfully')) {
       setState(() {
         _serverConnected = true;
+        _fullTunnelActive = true;
         _tunnelState = TunnelState.running;
-        _status = 'Подключено к серверу';
+        _status = 'Полный туннель подключён';
+      });
+    } else if (normalized.contains('transparent proxy server started')) {
+      setState(() {
+        _fullTunnelActive = true;
+        _status = 'Полный туннель запущен';
       });
     } else if (normalized.contains('socks5 server started') ||
         normalized.contains('http proxy server started')) {
@@ -903,7 +862,7 @@ class _HomePageState extends State<HomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('PP'),
+        title: const Text('PP GUI'),
         centerTitle: true,
         actions: [
           IconButton(
@@ -1023,46 +982,6 @@ class _HomePageState extends State<HomePage> {
                   ],
                 ),
         ),
-        const SizedBox(height: 12),
-        _panel(
-          title: 'Режим подключения',
-          trailing: _statusChip(_statusLabel(), _statusColor()),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _infoRow('SOCKS5', _socks5Listen.text),
-              _infoRow('HTTP', _httpProxyListen.text),
-              const SizedBox(height: 8),
-              SegmentedButton<bool>(
-                showSelectedIcon: false,
-                segments: const [
-                  ButtonSegment(
-                      value: false,
-                      icon: Icon(Icons.swap_horiz),
-                      label: Text('Прокси')),
-                  ButtonSegment(
-                      value: true,
-                      icon: Icon(Icons.route_outlined),
-                      label: Text('Туннель')),
-                ],
-                selected: {_fullTunnelRequested},
-                onSelectionChanged: _binary?.canFullTunnel == true
-                    ? (selection) {
-                        setState(() {
-                          _fullTunnelRequested = selection.first;
-                        });
-                      }
-                    : null,
-              ),
-              const SizedBox(height: 10),
-              OutlinedButton.icon(
-                onPressed: _busy ? null : _validateSelected,
-                icon: const Icon(Icons.fact_check_outlined),
-                label: const Text('Проверить конфиг и ping'),
-              ),
-            ],
-          ),
-        ),
       ],
     );
   }
@@ -1084,24 +1003,9 @@ class _HomePageState extends State<HomePage> {
       ),
       child: Column(
         children: [
-          Text(
-            _connectionTitle(connected, processActive),
-            textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .titleLarge
-                ?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            _connectionSubtitle(connected, processActive),
-            textAlign: TextAlign.center,
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(color: const Color(0xff64706d)),
-          ),
-          const SizedBox(height: 18),
+          _statusChip(_connectionTitle(connected, processActive),
+              _statusColor()),
+          const SizedBox(height: 16),
           SizedBox.square(
             dimension: 148,
             child: FilledButton(
@@ -1130,10 +1034,10 @@ class _HomePageState extends State<HomePage> {
 
   String _connectionTitle(bool connected, bool processActive) {
     if (connected) {
-      return 'PP подключён';
+      return 'Подключено';
     }
     if (processActive) {
-      return 'Подключение к серверу';
+      return _status;
     }
     if (_profileList.isEmpty) {
       return 'Добавьте конфиг';
@@ -1144,23 +1048,7 @@ class _HomePageState extends State<HomePage> {
     if (_binary?.installed != true) {
       return 'Установите pp-client';
     }
-    return 'PP готов к подключению';
-  }
-
-  String _connectionSubtitle(bool connected, bool processActive) {
-    if (connected || processActive) {
-      return _status;
-    }
-    if (_profileList.isEmpty) {
-      return 'Нет сохранённых конфигов. Импортируйте JSON или вставьте ppf:// URI.';
-    }
-    if (_selectedProfile == null) {
-      return 'Конфиг есть, но активный профиль не выбран.';
-    }
-    if (_binary?.installed != true) {
-      return 'Для подключения нужен установленный pp-client.';
-    }
-    return _status;
+    return 'Готово';
   }
 
   Widget _configsScreen() {
@@ -1196,15 +1084,7 @@ class _HomePageState extends State<HomePage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'PP',
-            style: Theme.of(context)
-                .textTheme
-                .headlineMedium
-                ?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Эталонное GUI-приложение для протокола PP. Оно нужно, чтобы проверять возможности протокола в одном компактном клиенте: конфиги, импорт URI, локальные прокси, полный туннель и диагностику.',
+            'Компактная оболочка для pp-client: импорт и выбор конфигов, запуск полного туннеля, проверка подключения, логи и обновление клиента.',
             style: Theme.of(context)
                 .textTheme
                 .bodyMedium
@@ -1390,7 +1270,11 @@ class _HomePageState extends State<HomePage> {
   }
 
   String _profileProtocol(ProfileRef profile) {
-    final raw = (profile.metadata['protocol'] ??
+    final meta = profile.metadata['meta'] is Map<String, dynamic>
+        ? profile.metadata['meta'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final raw = (meta['protocol'] ??
+            profile.metadata['protocol'] ??
             profile.metadata['type'] ??
             profile.metadata['scheme'] ??
             '')
@@ -1410,66 +1294,71 @@ class _HomePageState extends State<HomePage> {
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return Dialog.fullscreen(
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                children: [
-                  Row(
+        return StatefulBuilder(
+          builder: (context, dialogSetState) {
+            return Dialog.fullscreen(
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: Text(
-                          profile.name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              profile.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Закрыть',
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        tooltip: 'Закрыть',
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: _statusChip(
+                            _profileProtocol(profile), Colors.blueGrey),
+                      ),
+                      const SizedBox(height: 10),
+                      Expanded(
+                          child: _editorPanel(dialogSetState: dialogSetState)),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _busy
+                                  ? null
+                                  : () {
+                                      Navigator.pop(context);
+                                      unawaited(_saveProfile());
+                                    },
+                              icon: const Icon(Icons.save_outlined),
+                              label: const Text('Сохранить'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filledTonal(
+                            tooltip: 'Проверить',
+                            onPressed: _busy ? null : _validateSelected,
+                            icon: const Icon(Icons.task_alt_outlined),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child:
-                        _statusChip(_profileProtocol(profile), Colors.blueGrey),
-                  ),
-                  const SizedBox(height: 10),
-                  Expanded(child: _editorPanel()),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _busy
-                              ? null
-                              : () {
-                                  Navigator.pop(context);
-                                  unawaited(_saveProfile());
-                                },
-                          icon: const Icon(Icons.save_outlined),
-                          label: const Text('Сохранить'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      IconButton.filledTonal(
-                        tooltip: 'Проверить',
-                        onPressed: _busy ? null : _validateSelected,
-                        icon: const Icon(Icons.task_alt_outlined),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
@@ -1526,59 +1415,64 @@ class _HomePageState extends State<HomePage> {
     await showDialog<void>(
       context: context,
       builder: (context) {
-        return Dialog.fullscreen(
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                children: [
-                  Row(
+        return StatefulBuilder(
+          builder: (context, dialogSetState) {
+            return Dialog.fullscreen(
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
                     children: [
-                      Expanded(
-                        child: Text(
-                          'Новый конфиг',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleLarge
-                              ?.copyWith(fontWeight: FontWeight.w800),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              'Новый конфиг',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleLarge
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          IconButton(
+                            tooltip: 'Закрыть',
+                            onPressed: () => Navigator.pop(context),
+                            icon: const Icon(Icons.close),
+                          ),
+                        ],
                       ),
-                      IconButton(
-                        tooltip: 'Закрыть',
-                        onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close),
+                      const SizedBox(height: 10),
+                      Expanded(
+                          child: _editorPanel(dialogSetState: dialogSetState)),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: FilledButton.icon(
+                              onPressed: _busy
+                                  ? null
+                                  : () {
+                                      Navigator.pop(context);
+                                      unawaited(_saveProfile());
+                                    },
+                              icon: const Icon(Icons.save_outlined),
+                              label: const Text('Сохранить'),
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  Expanded(child: _editorPanel()),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _busy
-                              ? null
-                              : () {
-                                  Navigator.pop(context);
-                                  unawaited(_saveProfile());
-                                },
-                          icon: const Icon(Icons.save_outlined),
-                          label: const Text('Сохранить'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
+            );
+          },
         );
       },
     );
   }
 
-  Widget _editorPanel() {
+  Widget _editorPanel({StateSetter? dialogSetState}) {
     return _panel(
       title: 'Конфигурация',
       expandChild: true,
@@ -1612,6 +1506,7 @@ class _HomePageState extends State<HomePage> {
             }
             _editorMode = selection.first;
           });
+          dialogSetState?.call(() {});
         },
       ),
       child:

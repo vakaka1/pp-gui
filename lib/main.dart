@@ -15,7 +15,7 @@ class PpGuiApp extends StatelessWidget {
   Widget build(BuildContext context) {
     const seed = Color(0xff2f6f73);
     return MaterialApp(
-      title: 'PP',
+      title: 'PP GUI',
       debugShowCheckedModeBanner: false,
       locale: const Locale('ru'),
       supportedLocales: const [

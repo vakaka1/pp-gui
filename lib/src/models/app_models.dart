@@ -3,7 +3,6 @@ import 'dart:io';
 
 enum PpCapability {
   validateConfig,
-  fullTunnel,
   importUri,
   listProfiles,
   deleteProfile,
@@ -35,7 +34,8 @@ class CommandResult {
   final String stderr;
 
   bool get ok => exitCode == 0;
-  String get combinedOutput => [stdout, stderr].where((part) => part.trim().isNotEmpty).join('\n');
+  String get combinedOutput =>
+      [stdout, stderr].where((part) => part.trim().isNotEmpty).join('\n');
 }
 
 class PpBinaryInfo {
@@ -57,11 +57,12 @@ class PpBinaryInfo {
 
   bool get installed => path != null && error == null;
   bool get canValidate => capabilities.contains(PpCapability.validateConfig);
-  bool get canFullTunnel => capabilities.contains(PpCapability.fullTunnel);
   bool get canImportUri => capabilities.contains(PpCapability.importUri);
   bool get canListProfiles => capabilities.contains(PpCapability.listProfiles);
-  bool get canDeleteProfile => capabilities.contains(PpCapability.deleteProfile);
-  bool get canTransparentListen => capabilities.contains(PpCapability.transparentListen);
+  bool get canDeleteProfile =>
+      capabilities.contains(PpCapability.deleteProfile);
+  bool get canTransparentListen =>
+      capabilities.contains(PpCapability.transparentListen);
 
   String get displayVersion => version ?? 'неизвестно';
 }
@@ -119,7 +120,9 @@ class ReleaseInfo {
 
   ReleaseAsset? assetForCurrentPlatform() {
     if (Platform.isLinux) {
-      return assets.where((asset) => asset.name == 'pp-client_linux_amd64').firstOrNull;
+      return assets
+          .where((asset) => asset.name == 'pp-client_linux_amd64')
+          .firstOrNull;
     }
     if (Platform.isWindows) {
       final candidates = assets.where((asset) {
@@ -158,7 +161,8 @@ class ProfileRef {
 
   factory ProfileRef.fromManagedFile(File file, Map<String, dynamic> json) {
     final fallbackName = _fileStem(file.path);
-    final name = (json['profile_name'] ?? json['name'] ?? fallbackName).toString();
+    final name =
+        (json['profile_name'] ?? json['name'] ?? fallbackName).toString();
     return ProfileRef(
       id: file.path,
       name: name,
@@ -169,9 +173,14 @@ class ProfileRef {
   }
 
   factory ProfileRef.fromClientJson(Map<String, dynamic> json) {
-    final rawPath = json['path'] ?? json['config_path'] ?? json['file'] ?? json['filename'];
+    final rawPath =
+        json['path'] ?? json['config_path'] ?? json['file'] ?? json['filename'];
     final path = rawPath?.toString();
-    final name = (json['name'] ?? json['profile'] ?? json['id'] ?? (path == null ? 'профиль' : _fileStem(path))).toString();
+    final name = (json['name'] ??
+            json['profile'] ??
+            json['id'] ??
+            (path == null ? 'профиль' : _fileStem(path)))
+        .toString();
     return ProfileRef(
       id: path ?? name,
       name: name,
@@ -232,24 +241,47 @@ class ClientConfigDraft {
   }
 
   factory ClientConfigDraft.fromJson(Map<String, dynamic> json) {
-    final client = json['client'] is Map<String, dynamic> ? json['client'] as Map<String, dynamic> : <String, dynamic>{};
-    final server = client['server'] is Map<String, dynamic> ? client['server'] as Map<String, dynamic> : <String, dynamic>{};
-    final transport = client['transport'] is Map<String, dynamic> ? client['transport'] as Map<String, dynamic> : <String, dynamic>{};
-    final log = json['log'] is Map<String, dynamic> ? json['log'] as Map<String, dynamic> : <String, dynamic>{};
+    final client = json['client'] is Map<String, dynamic>
+        ? json['client'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final server = client['server'] is Map<String, dynamic>
+        ? client['server'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final transport = client['transport'] is Map<String, dynamic>
+        ? client['transport'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final log = json['log'] is Map<String, dynamic>
+        ? json['log'] as Map<String, dynamic>
+        : <String, dynamic>{};
+    final meta = json['meta'] is Map<String, dynamic>
+        ? json['meta'] as Map<String, dynamic>
+        : <String, dynamic>{};
 
     return ClientConfigDraft(
-      profileName: (json['profile_name'] ?? json['name'] ?? server['domain'] ?? 'Профиль').toString(),
+      profileName: (json['profile_name'] ??
+              json['name'] ??
+              meta['client_name'] ??
+              server['domain'] ??
+              'Профиль')
+          .toString(),
       serverAddress: (server['address'] ?? '').toString(),
       serverDomain: (server['domain'] ?? '').toString(),
       noisePublicKey: (server['noise_public_key'] ?? '').toString(),
       psk: (server['psk'] ?? '').toString(),
-      grpcPath: (server['grpc_path'] ?? '/pp.v1.TunnelService/Connect').toString(),
+      grpcPath:
+          (server['grpc_path'] ?? '/pp.v1.TunnelService/Connect').toString(),
       socks5Listen: (client['socks5_listen'] ?? '127.0.0.1:1080').toString(),
-      httpProxyListen: (client['http_proxy_listen'] ?? '127.0.0.1:8080').toString(),
-      transparentListen: (client['transparent_listen'] ?? '127.0.0.1:18080').toString(),
+      httpProxyListen:
+          (client['http_proxy_listen'] ?? '127.0.0.1:8080').toString(),
+      transparentListen:
+          (client['transparent_listen'] ?? '127.0.0.1:18080').toString(),
       logLevel: (log['level'] ?? 'info').toString(),
-      shaperEnabled: transport['shaper_enabled'] is bool ? transport['shaper_enabled'] as bool : true,
-      keepaliveSeconds: transport['keepalive_interval_seconds'] is int ? transport['keepalive_interval_seconds'] as int : 25,
+      shaperEnabled: transport['shaper_enabled'] is bool
+          ? transport['shaper_enabled'] as bool
+          : true,
+      keepaliveSeconds: transport['keepalive_interval_seconds'] is int
+          ? transport['keepalive_interval_seconds'] as int
+          : 25,
       tlsFingerprint: (server['tls_fingerprint'] ?? '').toString(),
     );
   }
@@ -264,7 +296,8 @@ class ClientConfigDraft {
       throw const FormatException('В URI не указан хост');
     }
     final port = uri.hasPort ? uri.port : 443;
-    final pub = uri.queryParameters['pub'] ?? uri.queryParameters['public_key'] ?? '';
+    final pub =
+        uri.queryParameters['pub'] ?? uri.queryParameters['public_key'] ?? '';
     final psk = uri.queryParameters['psk'] ?? uri.queryParameters['key'] ?? '';
     final path = uri.queryParameters['path'] ?? '/pp.v1.TunnelService/Connect';
     final user = uri.userInfo.trim();
@@ -291,7 +324,9 @@ class ClientConfigDraft {
       'domain': serverDomain.trim(),
       'noise_public_key': noisePublicKey.trim(),
       'psk': psk.trim(),
-      'grpc_path': grpcPath.trim().isEmpty ? '/pp.v1.TunnelService/Connect' : grpcPath.trim(),
+      'grpc_path': grpcPath.trim().isEmpty
+          ? '/pp.v1.TunnelService/Connect'
+          : grpcPath.trim(),
     };
     if (tlsFingerprint.trim().isNotEmpty) {
       server['tls_fingerprint'] = tlsFingerprint.trim();
@@ -309,7 +344,14 @@ class ClientConfigDraft {
     };
 
     return {
-      'profile_name': profileName.trim().isEmpty ? 'Профиль' : profileName.trim(),
+      'profile_name':
+          profileName.trim().isEmpty ? 'Профиль' : profileName.trim(),
+      'meta': {
+        'client_name':
+            profileName.trim().isEmpty ? 'profile' : profileName.trim(),
+        'protocol': 'pp-fallback',
+        'generated_at': DateTime.now().toUtc().toIso8601String(),
+      },
       'log': {
         'level': logLevel.trim().isEmpty ? 'info' : logLevel.trim(),
         'output': 'stdout',
@@ -391,13 +433,17 @@ List<int> _tagParts(String tag) {
     if (index >= pieces.length) {
       return 0;
     }
-    return int.tryParse(pieces[index].replaceAll(RegExp(r'[^0-9].*$'), '')) ?? 0;
+    return int.tryParse(pieces[index].replaceAll(RegExp(r'[^0-9].*$'), '')) ??
+        0;
   });
 }
 
 String _fileStem(String path) {
   final normalized = path.replaceAll('\\', '/');
-  final parts = normalized.split('/').where((part) => part.isNotEmpty).toList(growable: false);
+  final parts = normalized
+      .split('/')
+      .where((part) => part.isNotEmpty)
+      .toList(growable: false);
   final name = parts.isEmpty ? normalized : parts.last;
   final dot = name.lastIndexOf('.');
   return dot <= 0 ? name : name.substring(0, dot);

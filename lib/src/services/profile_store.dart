@@ -27,7 +27,8 @@ class ProfileStore {
         continue;
       }
     }
-    profiles.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    profiles
+        .sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
     return profiles;
   }
 
@@ -50,12 +51,16 @@ class ProfileStore {
         ? decoded
         : {
             ...decoded,
-            'profile_name': fallback != null && fallback.isNotEmpty ? fallback : draft.profileName,
+            'profile_name': fallback != null && fallback.isNotEmpty
+                ? fallback
+                : draft.profileName,
           };
-    final name = (withName['profile_name'] ?? fallbackName ?? draft.profileName).toString();
+    final name = (withName['profile_name'] ?? fallbackName ?? draft.profileName)
+        .toString();
     final file = AppPaths.managedProfileFile(name);
     await file.parent.create(recursive: true);
-    await file.writeAsString(const JsonEncoder.withIndent('  ').convert(withName));
+    await file
+        .writeAsString(const JsonEncoder.withIndent('  ').convert(withName));
     return ProfileRef.fromManagedFile(file, withName);
   }
 

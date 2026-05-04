@@ -57,12 +57,6 @@ class PpClientService {
       capabilities.add(PpCapability.transparentListen);
     }
 
-    final fullTunnelHelp =
-        await runCommand(resolvedPath, const ['full-tunnel', '--help']);
-    if (fullTunnelHelp.ok && fullTunnelHelp.stdout.contains('full-tunnel')) {
-      capabilities.add(PpCapability.fullTunnel);
-    }
-
     return PpBinaryInfo(
       path: resolvedPath,
       version: version,
@@ -138,7 +132,30 @@ class PpClientService {
     return items
         .whereType<Map<String, dynamic>>()
         .map(ProfileRef.fromClientJson)
+        .map(_resolveClientStoreProfilePath)
         .toList(growable: false);
+  }
+
+  ProfileRef _resolveClientStoreProfilePath(ProfileRef profile) {
+    final path = profile.path;
+    if (path == null || path.trim().isEmpty) {
+      return profile;
+    }
+    final resolvedPath = AppPaths.resolvePpClientConfigPath(path);
+    if (resolvedPath == path) {
+      return profile;
+    }
+    return ProfileRef(
+      id: resolvedPath,
+      name: profile.name,
+      source: profile.source,
+      path: resolvedPath,
+      metadata: {
+        ...profile.metadata,
+        'path': resolvedPath,
+        'original_path': path,
+      },
+    );
   }
 
   Future<CommandResult> importUri(PpBinaryInfo binary, String uri) {
@@ -155,60 +172,15 @@ class PpClientService {
     PpBinaryInfo binary,
     ProfileRef profile, {
     required bool verbose,
-    String? transparentListen,
   }) {
     final args = <String>[];
     if (verbose) {
       args.add('--verbose');
     }
     args.add('start');
-    if (profile.path != null) {
-      args.addAll(['--config', profile.path!]);
-    } else {
-      args.add(profile.name);
-    }
-    if (transparentListen != null &&
-        transparentListen.trim().isNotEmpty &&
-        binary.canTransparentListen) {
-      args.addAll(['--transparent-listen', transparentListen.trim()]);
-    }
+    args.add('--full-tunnel');
+    args.add(profile.name);
     return Process.start(binary.path!, args, runInShell: false);
-  }
-
-  Future<CommandResult> fullTunnelUp(
-    PpBinaryInfo binary,
-    ProfileRef profile, {
-    required String transparentListen,
-    required String owner,
-  }) {
-    if (!Platform.isLinux) {
-      return Future.value(const CommandResult(
-          exitCode: 1,
-          stdout: '',
-          stderr: 'Полный туннель поддерживается только в Linux'));
-    }
-    return _runPrivileged([
-      binary.path!,
-      'full-tunnel',
-      'up',
-      if (profile.path != null) ...['--config', profile.path!] else
-        profile.name,
-      if (transparentListen.trim().isNotEmpty) ...[
-        '--transparent-listen',
-        transparentListen.trim()
-      ],
-      if (owner.trim().isNotEmpty) ...['--owner', owner.trim()],
-    ]);
-  }
-
-  Future<CommandResult> fullTunnelDown(PpBinaryInfo binary) {
-    if (!Platform.isLinux) {
-      return Future.value(const CommandResult(
-          exitCode: 1,
-          stdout: '',
-          stderr: 'Полный туннель поддерживается только в Linux'));
-    }
-    return _runPrivileged([binary.path!, 'full-tunnel', 'down']);
   }
 
   Future<CommandResult> runCommand(
@@ -217,32 +189,6 @@ class PpClientService {
     Duration timeout = const Duration(seconds: 8),
   }) {
     return _safeProcessRun(executable, args, timeout: timeout);
-  }
-
-  Future<CommandResult> _runPrivileged(List<String> args) async {
-    final pkexec = await _resolveCommand('pkexec');
-    if (pkexec == null) {
-      return const CommandResult(
-        exitCode: 127,
-        stdout: '',
-        stderr:
-            'pkexec не найден. Установите пакет policykit-1/polkit и перезапустите приложение, чтобы GUI мог запросить права администратора для полного туннеля.',
-      );
-    }
-    return _safeProcessRun(pkexec, args, timeout: const Duration(minutes: 2));
-  }
-
-  Future<String?> _resolveCommand(String command) async {
-    final lookup = await _safeProcessRun(
-        Platform.isWindows ? 'where' : 'which', [command]);
-    if (!lookup.ok) {
-      return null;
-    }
-    return const LineSplitter()
-        .convert(lookup.stdout)
-        .where((line) => line.trim().isNotEmpty)
-        .firstOrNull
-        ?.trim();
   }
 
   static String? parseVersion(String output) {
