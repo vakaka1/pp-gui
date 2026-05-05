@@ -9,7 +9,7 @@ class AppPaths {
   }
 
   static Directory get profilesDirectory {
-    return Directory(_join(configDirectory.path, 'profiles'));
+    return ppClientConfigDirectory;
   }
 
   static Directory get ppClientConfigDirectory {
@@ -34,11 +34,9 @@ class AppPaths {
   static String _safeProfileName(String profileName) {
     final safeName = profileName
         .trim()
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^a-z0-9а-яё._-]+', unicode: true), '-')
-        .replaceAll(RegExp(r'-+'), '-')
-        .replaceAll(RegExp(r'^-|-$'), '');
-    return safeName.isEmpty ? 'профиль' : safeName;
+        .replaceAll(RegExp(r'[\\/:*?"<>|]'), '-') // Windows-unsafe chars
+        .replaceAll(RegExp(r'\s+'), '_');
+    return safeName.isEmpty ? 'profile' : safeName;
   }
 
   static File defaultInstallTarget() {

@@ -7,25 +7,34 @@ import 'app_paths.dart';
 class ProfileStore {
   Future<List<ProfileRef>> listManagedProfiles() async {
     final directory = AppPaths.profilesDirectory;
-    if (!await directory.exists()) {
+    try {
+      if (!await directory.exists()) {
+        return const [];
+      }
+    } on FileSystemException {
       return const [];
     }
 
     final profiles = <ProfileRef>[];
-    await for (final entity in directory.list(followLinks: false)) {
-      if (entity is! File || !entity.path.toLowerCase().endsWith('.json')) {
-        continue;
-      }
-      try {
-        final decoded = jsonDecode(await entity.readAsString());
-        if (decoded is Map<String, dynamic>) {
-          profiles.add(ProfileRef.fromManagedFile(entity, decoded));
+    try {
+      await for (final entity in directory.list(followLinks: false)) {
+        if (entity is! File || !entity.path.toLowerCase().endsWith('.json')) {
+          continue;
         }
-      } on FormatException {
-        continue;
-      } on IOException {
-        continue;
+        try {
+          final content = await entity.readAsString();
+          if (content.trim().isEmpty) continue;
+          final decoded = jsonDecode(content);
+          if (decoded is Map<String, dynamic>) {
+            profiles.add(ProfileRef.fromManagedFile(entity, decoded));
+          }
+        } on Object {
+          // Skip files that cannot be read or parsed
+          continue;
+        }
       }
+    } on Object {
+      // Return what we found even if listing fails partially
     }
     profiles
         .sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -47,16 +56,14 @@ class ProfileStore {
     }
     final draft = ClientConfigDraft.fromJson(decoded);
     final fallback = fallbackName?.trim();
-    final withName = decoded.containsKey('profile_name')
-        ? decoded
-        : {
-            ...decoded,
-            'profile_name': fallback != null && fallback.isNotEmpty
-                ? fallback
-                : draft.profileName,
-          };
-    final name = (withName['profile_name'] ?? fallbackName ?? draft.profileName)
+    final name = (decoded['profile_name'] ?? decoded['name'] ?? fallback ?? draft.profileName)
         .toString();
+    
+    final withName = {
+      ...decoded,
+      if (!decoded.containsKey('profile_name')) 'profile_name': name,
+    };
+
     final file = AppPaths.managedProfileFile(name);
     await file.parent.create(recursive: true);
     await file
@@ -69,7 +76,11 @@ class ProfileStore {
     if (path == null) {
       throw const FileSystemException('У профиля нет пути к конфигурации');
     }
-    final decoded = jsonDecode(await File(path).readAsString());
+    final file = File(path);
+    if (!await file.exists()) {
+       throw FileSystemException('Файл не найден', path);
+    }
+    final decoded = jsonDecode(await file.readAsString());
     if (decoded is! Map<String, dynamic>) {
       throw const FormatException('JSON профиля должен быть объектом');
     }
@@ -81,7 +92,11 @@ class ProfileStore {
     if (path == null) {
       throw const FileSystemException('У профиля нет пути к конфигурации');
     }
-    return File(path).readAsString();
+    final file = File(path);
+    if (!await file.exists()) {
+       throw FileSystemException('Файл не найден', path);
+    }
+    return file.readAsString();
   }
 
   Future<void> deleteManaged(ProfileRef profile) async {

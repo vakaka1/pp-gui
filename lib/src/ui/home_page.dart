@@ -164,22 +164,32 @@ class _HomePageState extends State<HomePage> {
     }
 
     final all = [...managed, ...clientProfiles];
+    final seenPaths = <String>{};
+    final deduplicated = <ProfileRef>[];
+    
+    for (final profile in all) {
+      final key = profile.path ?? profile.id;
+      if (seenPaths.add(key)) {
+        deduplicated.add(profile);
+      }
+    }
+
     ProfileRef? selected;
     if (preserveSelection && _selectedProfile != null) {
-      selected = all
+      selected = deduplicated
           .where((profile) => profile.id == _selectedProfile!.id)
           .firstOrNull;
     }
-    selected ??= all.firstOrNull;
+    selected ??= deduplicated.firstOrNull;
 
     if (!mounted) {
       return;
     }
     setState(() {
-      _profileList = all;
+      _profileList = deduplicated;
       _selectedProfile = selected;
       _profileChecks
-          .removeWhere((id, _) => !all.any((profile) => profile.id == id));
+          .removeWhere((id, _) => !deduplicated.any((profile) => profile.id == id));
     });
     if (selected != null) {
       await _selectProfile(selected);
@@ -207,7 +217,7 @@ class _HomePageState extends State<HomePage> {
     try {
       final raw = await _profiles.readRawJson(profile);
       final draft = await _profiles.readDraft(profile);
-      if (!mounted) {
+      if (!mounted || _selectedProfile?.id != profile.id) {
         return;
       }
       setState(() {
@@ -215,7 +225,12 @@ class _HomePageState extends State<HomePage> {
         _applyDraft(draft, updateJson: false);
       });
     } on Object catch (error) {
-      _appendLog('не удалось прочитать профиль: $error');
+      _appendLog('не удалось прочитать профиль ${profile.name}: $error');
+      if (mounted && _selectedProfile?.id == profile.id) {
+        setState(() {
+          _rawJson.clear();
+        });
+      }
     }
   }
 
@@ -470,8 +485,9 @@ class _HomePageState extends State<HomePage> {
         verbose: _verboseLogs,
       );
       _clientProcess = process;
+      final configDesc = profile.path ?? profile.name;
       _appendLog(
-          'pp-client start --full-tunnel ${profile.name} запущен, pid=${process.pid}');
+          'pp-client start ${profile.path != null ? '--config ' : ''}$configDesc --full-tunnel запущен, pid=${process.pid}');
 
       _stdoutSub = process.stdout
           .transform(utf8.decoder)
@@ -520,7 +536,12 @@ class _HomePageState extends State<HomePage> {
       _stopRequested = true;
       _status = 'Остановка туннеля';
     });
-    _clientProcess?.kill(ProcessSignal.sigterm);
+    
+    final process = _clientProcess;
+    if (process != null) {
+      await _ppClient.stop(process, profile: _selectedProfile);
+    }
+    
     await Future<void>.delayed(const Duration(milliseconds: 250));
     if (mounted && _clientProcess == null) {
       setState(() {

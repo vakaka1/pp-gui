@@ -178,11 +178,52 @@ class PpClientService {
       args.add('--verbose');
     }
     args.add('start');
+    
+    // Use absolute path if available to ensure it works under pkexec/sudo
+    if (profile.path != null) {
+      args.add('--config');
+      args.add(profile.path!);
+    } else {
+      args.add(profile.name);
+    }
+    
     args.add('--full-tunnel');
-    args.add(profile.name);
+
+    if (Platform.isLinux) {
+      return Process.start('pkexec', [binary.path!, ...args], runInShell: false);
+    } else if (Platform.isMacOS) {
+      // For macOS, we can use osascript to prompt for password
+      final shellCmd = "'${binary.path}' ${args.map((a) => "'$a'").join(' ')}";
+      return Process.start('osascript', [
+        '-e',
+        'do shell script "$shellCmd" with administrator privileges'
+      ], runInShell: false);
+    }
+
     return Process.start(binary.path!, args, runInShell: false);
   }
+Future<void> stop(Process process, {ProfileRef? profile}) async {
+  if (Platform.isLinux) {
+    // Use SIGINT (-2) for graceful shutdown, it's safer for Go apps.
+    // Use the config path to target ONLY the specific process.
+    final configPath = profile?.path;
+    if (configPath != null && configPath.isNotEmpty) {
+      // We use pkexec to ensure we have permission to kill if it was started as root.
+      // Using -INT instead of -TERM helps to avoid 'close of closed channel' panic.
+      await _safeProcessRun('pkexec', ['pkill', '-INT', '-f', 'pp-client.*--config $configPath']);
+    }
 
+    // Also kill the pkexec wrapper itself
+    process.kill();
+  } else if (Platform.isMacOS) {
+    await _safeProcessRun('osascript', [
+      '-e',
+      'do shell script "pkill -INT -f pp-client.*start.*--full-tunnel" with administrator privileges'
+    ]);
+  } else {
+    process.kill();
+  }
+}
   Future<CommandResult> runCommand(
     String executable,
     List<String> args, {

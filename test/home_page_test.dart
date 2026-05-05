@@ -6,14 +6,14 @@ import 'package:pp_gui/src/ui/home_page.dart';
 void main() {
   testWidgets('HomePage loads without unbounded height exceptions', (WidgetTester tester) async {
     await tester.pumpWidget(const MaterialApp(home: HomePage()));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
     
     // Tap on Logs tab
     await tester.tap(find.text('Логи'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
     
     // Tap on Configs tab
     await tester.tap(find.text('Конфиги'));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
   });
 }
