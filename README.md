@@ -116,6 +116,3 @@ installer/
 
 ---
 
-## Лицензия
-
-[MIT](LICENSE)
