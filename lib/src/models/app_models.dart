@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 /// Current GUI application version (synced with pubspec.yaml).
-const String appVersion = '0.1.0';
+const String appVersion = '1.0.0';
 
 /// Result of `pp-client test` command.
 class TestResult {
