@@ -173,6 +173,25 @@ class ReleaseInfo {
     return null;
   }
 
+  /// Finds the GUI update archive for the current platform.
+  /// Linux → pp-gui-<tag>-linux.tar.gz
+  /// Windows → pp-gui-<tag>-windows.zip
+  ReleaseAsset? assetForCurrentGuiPlatform() {
+    if (Platform.isLinux) {
+      return assets.where((a) {
+        final n = a.name.toLowerCase();
+        return n.contains('pp-gui') && n.contains('linux') && n.endsWith('.tar.gz');
+      }).firstOrNull;
+    }
+    if (Platform.isWindows) {
+      return assets.where((a) {
+        final n = a.name.toLowerCase();
+        return n.contains('pp-gui') && n.contains('windows') && n.endsWith('.zip');
+      }).firstOrNull;
+    }
+    return null;
+  }
+
   bool isNewerThan(String? currentVersion) {
     if (currentVersion == null || currentVersion.trim().isEmpty) {
       return true;

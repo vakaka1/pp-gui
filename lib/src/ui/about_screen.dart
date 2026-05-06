@@ -13,8 +13,11 @@ class AboutScreen extends StatelessWidget {
     required this.installing,
     required this.installProgress,
     required this.updatingClient,
+    required this.updatingGui,
+    required this.guiUpdateProgress,
     required this.onInstallClient,
     required this.onUpdateClient,
+    required this.onUpdateGui,
     required this.onRefresh,
   });
 
@@ -24,8 +27,11 @@ class AboutScreen extends StatelessWidget {
   final bool installing;
   final double? installProgress;
   final bool updatingClient;
+  final bool updatingGui;
+  final double? guiUpdateProgress;
   final VoidCallback? onInstallClient;
   final VoidCallback? onUpdateClient;
+  final VoidCallback? onUpdateGui;
   final VoidCallback onRefresh;
 
   @override
@@ -65,6 +71,8 @@ class AboutScreen extends StatelessWidget {
   Widget _guiUpdatePanel() {
     final hasGuiUpdate = latestGuiRelease != null &&
         latestGuiRelease!.isNewerThan(appVersion);
+    final canUpdate = hasGuiUpdate &&
+        latestGuiRelease!.assetForCurrentGuiPlatform() != null;
     final stateText = hasGuiUpdate ? 'Есть обновление' : 'Актуально';
     final stateColor = hasGuiUpdate ? PpColors.orange : PpColors.green;
 
@@ -75,13 +83,34 @@ class AboutScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           InfoRow('Текущая', 'v$appVersion'),
-          InfoRow(
-              'Последняя', latestGuiRelease?.tagName ?? 'неизвестно'),
+          InfoRow('Последняя', latestGuiRelease?.tagName ?? 'неизвестно'),
           if (hasGuiUpdate) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             const Text(
-              'Скачайте обновление со страницы релизов на GitHub.',
-              style: TextStyle(color: PpColors.textDim, fontSize: 12),
+              'Новая версия PP GUI доступна. Нажмите «Обновить» — '
+              'приложение скачает обновление и перезапустится автоматически.',
+              style: TextStyle(
+                  color: PpColors.textDim, fontSize: 12, height: 1.4),
+            ),
+          ],
+          if (updatingGui) ...[
+            const SizedBox(height: 10),
+            LinearProgressIndicator(value: guiUpdateProgress),
+            const SizedBox(height: 4),
+            Text(
+              guiUpdateProgress != null
+                  ? 'Загрузка ${(guiUpdateProgress! * 100).toStringAsFixed(0)}%…'
+                  : 'Применение обновления…',
+              style:
+                  const TextStyle(color: PpColors.textDim, fontSize: 11),
+            ),
+          ],
+          if (canUpdate) ...[
+            const SizedBox(height: 10),
+            FilledButton.icon(
+              onPressed: updatingGui ? null : onUpdateGui,
+              icon: const Icon(Icons.system_update, size: 18),
+              label: const Text('Обновить GUI'),
             ),
           ],
         ],
@@ -120,7 +149,8 @@ class AboutScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(binary!.error!,
-                  style: const TextStyle(color: PpColors.red, fontSize: 12)),
+                  style:
+                      const TextStyle(color: PpColors.red, fontSize: 12)),
             ),
           if (installing) ...[
             const SizedBox(height: 10),
@@ -133,7 +163,6 @@ class AboutScreen extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              // pp-client update button (uses pp-client update command)
               if (binary?.installed == true && updateAvailable) ...[
                 Expanded(
                   child: FilledButton.icon(
@@ -145,7 +174,6 @@ class AboutScreen extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
               ],
-              // Install/reinstall from GitHub Releases
               if (notInstalled)
                 Expanded(
                   child: FilledButton.icon(

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../models/app_models.dart';
 import '../services/github_release_service.dart';
+import '../services/gui_updater.dart';
 import '../services/pp_client_service.dart';
 import '../services/profile_store.dart';
 import '../services/settings_store.dart';
@@ -27,6 +28,7 @@ class _AppShellState extends State<AppShell> {
   final _ppClient = PpClientService();
   final _releases = GitHubReleaseService();
   final _installer = PpClientInstaller();
+  final _guiUpdater = GuiUpdater();
   final _settingsStore = SettingsStore();
   final _profiles = ProfileStore();
 
@@ -46,10 +48,12 @@ class _AppShellState extends State<AppShell> {
   bool _busy = false;
   bool _installing = false;
   bool _updatingClient = false;
+  bool _updatingGui = false;
   bool _serverConnected = false;
   bool _stopRequested = false;
   bool _isTesting = false;
   double? _installProgress;
+  double? _guiUpdateProgress;
   String _status = 'Загрузка';
   TestResult? _testResult;
   final List<String> _logs = [];
@@ -409,6 +413,43 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
+  Future<void> _updateGui() async {
+    final release = _latestGuiRelease;
+    final asset = release?.assetForCurrentGuiPlatform();
+    if (release == null || asset == null) {
+      _showSnack('Нет пакета обновления GUI для этой платформы');
+      return;
+    }
+    setState(() {
+      _updatingGui = true;
+      _guiUpdateProgress = null;
+      _status = 'Обновление GUI ${release.tagName}';
+    });
+    try {
+      await _guiUpdater.applyUpdate(
+        asset,
+        onProgress: (received, total) {
+          if (!mounted || total == null || total == 0) return;
+          setState(() {
+            _guiUpdateProgress = received / total;
+          });
+        },
+      );
+      // applyUpdate calls exit(0) on success — this line is unreachable.
+    } on Object catch (e) {
+      _appendLog('ошибка обновления GUI: $e');
+      _showSnack('Ошибка обновления GUI: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _updatingGui = false;
+          _guiUpdateProgress = null;
+          _status = 'Готово';
+        });
+      }
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Log handling
   // ---------------------------------------------------------------------------
@@ -543,8 +584,11 @@ class _AppShellState extends State<AppShell> {
                         installing: _installing,
                         installProgress: _installProgress,
                         updatingClient: _updatingClient,
+                        updatingGui: _updatingGui,
+                        guiUpdateProgress: _guiUpdateProgress,
                         onInstallClient: _installLatestClient,
                         onUpdateClient: _updateClient,
+                        onUpdateGui: _updateGui,
                         onRefresh: _refreshEverything,
                       ),
                     ],

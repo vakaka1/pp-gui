@@ -9,6 +9,10 @@ permissions:
   contents: write
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # Linux: build Flutter bundle → package tar.gz (for in-app update)
+  #        + makeself .bin installer (for first install)
+  # ---------------------------------------------------------------------------
   build-linux:
     name: Build Linux
     runs-on: ubuntu-latest
@@ -16,7 +20,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Linux desktop dependencies
-        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libayatana-appindicator3-dev
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev makeself
 
       - uses: subosito/flutter-action@v2
         with:
@@ -32,42 +40,37 @@ jobs:
       - name: Build Linux
         run: flutter build linux --release
 
-      - name: Package
+      # ---- Archive (.tar.gz) — used by in-app GUI auto-update ---------------
+      - name: Package tar.gz (in-app update)
         run: |
-          BUNDLE=build/linux/x64/release/bundle
-          # Copy .desktop file and icon into the bundle
-          cp linux/dev.vakaka.pp_gui.desktop $BUNDLE/dev.vakaka.pp_gui.desktop
-          cp assets/app_icon_512.png $BUNDLE/dev.vakaka.pp_gui.png
-          # Create a simple install script
-          cat > $BUNDLE/install.sh << 'EOF'
-          #!/usr/bin/env bash
-          set -e
-          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-          INSTALL_DIR="$HOME/.local/lib/pp-gui"
-          BIN_DIR="$HOME/.local/bin"
-          ICON_DIR="$HOME/.local/share/icons/hicolor/512x512/apps"
-          DESKTOP_DIR="$HOME/.local/share/applications"
+          cd build/linux/x64/release/bundle
+          tar -czf "${{ github.workspace }}/pp-gui-${{ github.ref_name }}-linux.tar.gz" .
 
-          mkdir -p "$INSTALL_DIR" "$BIN_DIR" "$ICON_DIR" "$DESKTOP_DIR"
-          cp -r "$SCRIPT_DIR"/. "$INSTALL_DIR/"
-          chmod +x "$INSTALL_DIR/pp_gui"
-          ln -sf "$INSTALL_DIR/pp_gui" "$BIN_DIR/pp_gui"
-          cp "$INSTALL_DIR/dev.vakaka.pp_gui.png" "$ICON_DIR/dev.vakaka.pp_gui.png"
-          sed "s|Exec=pp_gui|Exec=$INSTALL_DIR/pp_gui|g" "$INSTALL_DIR/dev.vakaka.pp_gui.desktop" > "$DESKTOP_DIR/dev.vakaka.pp_gui.desktop"
-          update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
-          gtk-update-icon-cache -f "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
-          echo "PP GUI установлен. Запусти: pp_gui"
-          EOF
-          chmod +x $BUNDLE/install.sh
-          cd $BUNDLE
-          tar -czf ${{ github.workspace }}/pp-gui_linux_amd64.tar.gz .
+      # ---- makeself .bin installer ------------------------------------------
+      - name: Build .bin installer (makeself)
+        run: |
+          # Copy installer script into the bundle so makeself includes it
+          cp installer/linux/install.sh build/linux/x64/release/bundle/install.sh
+          chmod +x build/linux/x64/release/bundle/install.sh
 
+          makeself \
+            --needroot \
+            build/linux/x64/release/bundle \
+            "pp-gui-${{ github.ref_name }}-linux.bin" \
+            "PP GUI ${{ github.ref_name }} Installer" \
+            ./install.sh
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-build
-          path: pp-gui_linux_amd64.tar.gz
+          path: |
+            pp-gui-${{ github.ref_name }}-linux.tar.gz
+            pp-gui-${{ github.ref_name }}-linux.bin
 
+  # ---------------------------------------------------------------------------
+  # Windows: build Flutter bundle → package zip (for in-app update)
+  #          + Inno Setup .exe installer (for first install)
+  # ---------------------------------------------------------------------------
   build-windows:
     name: Build Windows
     runs-on: windows-latest
@@ -88,16 +91,42 @@ jobs:
       - name: Build Windows
         run: flutter build windows --release
 
-      - name: Package
+      # ---- Archive (.zip) — used by in-app GUI auto-update ------------------
+      - name: Package zip (in-app update)
         shell: pwsh
         run: |
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath pp-gui_windows_amd64.zip
+          Compress-Archive `
+            -Path build\windows\x64\runner\Release\* `
+            -DestinationPath "pp-gui-${{ github.ref_name }}-windows.zip"
+
+      # ---- Inno Setup .exe installer ----------------------------------------
+      - name: Prepare Inno Setup bundle directory
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path installer\windows\bundle | Out-Null
+          Copy-Item -Recurse -Force build\windows\x64\runner\Release\* installer\windows\bundle\
+
+      - name: Build .exe installer (Inno Setup)
+        shell: pwsh
+        run: |
+          # Inno Setup is pre-installed on windows-latest runners
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          & $iscc `
+            /DAppVersion="${{ github.ref_name }}" `
+            /O"." `
+            /F"pp-gui-${{ github.ref_name }}-windows-setup" `
+            installer\windows\pp-gui.iss
 
       - uses: actions/upload-artifact@v4
         with:
           name: windows-build
-          path: pp-gui_windows_amd64.zip
+          path: |
+            pp-gui-${{ github.ref_name }}-windows.zip
+            pp-gui-${{ github.ref_name }}-windows-setup.exe
 
+  # ---------------------------------------------------------------------------
+  # Create GitHub release and attach all artefacts
+  # ---------------------------------------------------------------------------
   release:
     name: Create Release
     needs: [build-linux, build-windows]
@@ -130,8 +159,9 @@ jobs:
           echo "$MSG" > release_notes.txt
 
           gh release create ${{ github.ref_name }} \
-            --title "Release ${{ github.ref_name }}" \
+            --title "PP GUI ${{ github.ref_name }}" \
             --notes-file release_notes.txt \
-            --generate-notes \
-            artifacts/pp-gui_linux_amd64.tar.gz \
-            artifacts/pp-gui_windows_amd64.zip
+            "artifacts/pp-gui-${{ github.ref_name }}-linux.bin#Linux Installer (.bin)" \
+            "artifacts/pp-gui-${{ github.ref_name }}-linux.tar.gz#Linux Archive (in-app update)" \
+            "artifacts/pp-gui-${{ github.ref_name }}-windows-setup.exe#Windows Installer (.exe)" \
+            "artifacts/pp-gui-${{ github.ref_name }}-windows.zip#Windows Archive (in-app update)"
