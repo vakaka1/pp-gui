@@ -20,8 +20,10 @@ fi
 
 echo "[1/4] Installing application to $INSTALL_DIR ..."
 mkdir -p "$INSTALL_DIR"
-# SCRIPTDIR is set by makeself to the temp extraction directory
-cp -r "$SCRIPTDIR"/. "$INSTALL_DIR/"
+# makeself executes the script from the extraction directory, so we can use current dir
+cp -r . "$INSTALL_DIR/"
+# remove the installer script itself from the final destination
+rm -f "$INSTALL_DIR/install.sh"
 chmod 755 "$INSTALL_DIR/pp_gui"
 
 echo "[2/4] Creating launcher symlink at $BIN_LINK ..."
