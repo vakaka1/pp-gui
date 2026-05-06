@@ -22,26 +22,49 @@ list(APPEND FLUTTER_LIBRARY_HEADERS
   "${EPHEMERAL_DIR}/cpp_client_wrapper/core_implementations.cc"
   "${EPHEMERAL_DIR}/cpp_client_wrapper/standard_codec.cc"
 )
-set(FLUTTER_WRAPPER_SOURCES
-  "${EPHEMERAL_DIR}/cpp_client_wrapper/core_implementations.cc"
-  "${EPHEMERAL_DIR}/cpp_client_wrapper/standard_codec.cc"
-  "${EPHEMERAL_DIR}/cpp_client_wrapper/plugin_registrar.cc"
+set(FLUTTER_WRAPPER_APP_SOURCES
   "${EPHEMERAL_DIR}/cpp_client_wrapper/flutter_engine.cc"
   "${EPHEMERAL_DIR}/cpp_client_wrapper/flutter_view_controller.cc"
 )
-set_source_files_properties(${FLUTTER_LIBRARY_HEADERS} ${FLUTTER_WRAPPER_SOURCES} PROPERTIES GENERATED TRUE)
+set(FLUTTER_WRAPPER_PLUGIN_SOURCES
+  "${EPHEMERAL_DIR}/cpp_client_wrapper/core_implementations.cc"
+  "${EPHEMERAL_DIR}/cpp_client_wrapper/standard_codec.cc"
+  "${EPHEMERAL_DIR}/cpp_client_wrapper/plugin_registrar.cc"
+)
+set_source_files_properties(
+  ${FLUTTER_LIBRARY_HEADERS}
+  ${FLUTTER_WRAPPER_APP_SOURCES}
+  ${FLUTTER_WRAPPER_PLUGIN_SOURCES}
+  PROPERTIES GENERATED TRUE
+)
 
 add_library(flutter INTERFACE)
-target_include_directories(flutter INTERFACE "${EPHEMERAL_DIR}")
+target_include_directories(flutter INTERFACE
+  "${EPHEMERAL_DIR}"
+  "${EPHEMERAL_DIR}/cpp_client_wrapper/include"
+)
 target_link_libraries(flutter INTERFACE "${EPHEMERAL_DIR}/flutter_windows.dll.lib")
 add_dependencies(flutter flutter_assemble)
 
 add_library(flutter_wrapper_app STATIC
-  ${FLUTTER_WRAPPER_SOURCES}
+  ${FLUTTER_WRAPPER_APP_SOURCES}
 )
-target_link_libraries(flutter_wrapper_app PUBLIC flutter)
-target_include_directories(flutter_wrapper_app PUBLIC "${EPHEMERAL_DIR}")
+target_link_libraries(flutter_wrapper_app PUBLIC flutter_wrapper_plugin)
+target_include_directories(flutter_wrapper_app PUBLIC
+  "${EPHEMERAL_DIR}"
+  "${EPHEMERAL_DIR}/cpp_client_wrapper/include"
+)
 add_dependencies(flutter_wrapper_app flutter_assemble)
+
+add_library(flutter_wrapper_plugin STATIC
+  ${FLUTTER_WRAPPER_PLUGIN_SOURCES}
+)
+target_link_libraries(flutter_wrapper_plugin PUBLIC flutter)
+target_include_directories(flutter_wrapper_plugin PUBLIC
+  "${EPHEMERAL_DIR}"
+  "${EPHEMERAL_DIR}/cpp_client_wrapper/include"
+)
+add_dependencies(flutter_wrapper_plugin flutter_assemble)
 
 add_custom_command(
   OUTPUT ${FLUTTER_LIBRARY_HEADERS}
@@ -54,6 +77,7 @@ add_custom_command(
     ${FLUTTER_TOOL_ENVIRONMENT}
     "${FLUTTER_ROOT}/packages/flutter_tools/bin/tool_backend.bat"
       windows-x64 $<CONFIG>
+  COMMAND ${CMAKE_COMMAND} -E touch "${CMAKE_CURRENT_BINARY_DIR}/_phony_"
   VERBATIM
 )
 

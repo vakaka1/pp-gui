@@ -29,6 +29,7 @@ endfunction()
 
 add_subdirectory(flutter)
 add_subdirectory(runner)
+include(flutter/generated_plugins.cmake)
 
 set(BUILD_BUNDLE_DIR "$<TARGET_FILE_DIR:${BINARY_NAME}>")
 set(CMAKE_VS_INCLUDE_INSTALL_TO_DEFAULT_BUILD 1)

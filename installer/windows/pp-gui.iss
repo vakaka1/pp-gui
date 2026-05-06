@@ -3,7 +3,6 @@
 ; and registers the application in Add/Remove Programs.
 
 #define MyAppName "PP GUI"
-#define MyAppVersion "{#AppVersion}"
 #define MyAppPublisher "vakaka1"
 #define MyAppURL "https://github.com/vakaka1/pp-gui"
 #define MyAppExeName "pp_gui.exe"
@@ -11,7 +10,7 @@
 [Setup]
 AppId={{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 AppName={#MyAppName}
-AppVersion={#MyAppVersion}
+AppVersion={#AppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}/issues
@@ -30,7 +29,6 @@ PrivilegesRequiredOverridesAllowed=dialog
 PrivilegesRequired=lowest
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
-VersionInfoVersion={#MyAppVersion}
 VersionInfoProductName={#MyAppName}
 VersionInfoDescription=PP Protocol GUI Client
 
