@@ -16,7 +16,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install Linux desktop dependencies
-        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev libayatana-appindicator3-dev
 
       - uses: subosito/flutter-action@v2
         with:
@@ -34,8 +34,34 @@ jobs:
 
       - name: Package
         run: |
-          cd build/linux/x64/release/bundle
+          BUNDLE=build/linux/x64/release/bundle
+          # Copy .desktop file and icon into the bundle
+          cp linux/dev.vakaka.pp_gui.desktop $BUNDLE/dev.vakaka.pp_gui.desktop
+          cp assets/app_icon_512.png $BUNDLE/dev.vakaka.pp_gui.png
+          # Create a simple install script
+          cat > $BUNDLE/install.sh << 'EOF'
+          #!/usr/bin/env bash
+          set -e
+          SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          INSTALL_DIR="$HOME/.local/lib/pp-gui"
+          BIN_DIR="$HOME/.local/bin"
+          ICON_DIR="$HOME/.local/share/icons/hicolor/512x512/apps"
+          DESKTOP_DIR="$HOME/.local/share/applications"
+
+          mkdir -p "$INSTALL_DIR" "$BIN_DIR" "$ICON_DIR" "$DESKTOP_DIR"
+          cp -r "$SCRIPT_DIR"/. "$INSTALL_DIR/"
+          chmod +x "$INSTALL_DIR/pp_gui"
+          ln -sf "$INSTALL_DIR/pp_gui" "$BIN_DIR/pp_gui"
+          cp "$INSTALL_DIR/dev.vakaka.pp_gui.png" "$ICON_DIR/dev.vakaka.pp_gui.png"
+          sed "s|Exec=pp_gui|Exec=$INSTALL_DIR/pp_gui|g" "$INSTALL_DIR/dev.vakaka.pp_gui.desktop" > "$DESKTOP_DIR/dev.vakaka.pp_gui.desktop"
+          update-desktop-database "$DESKTOP_DIR" 2>/dev/null || true
+          gtk-update-icon-cache -f "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+          echo "PP GUI установлен. Запусти: pp_gui"
+          EOF
+          chmod +x $BUNDLE/install.sh
+          cd $BUNDLE
           tar -czf ${{ github.workspace }}/pp-gui_linux_amd64.tar.gz .
+
 
       - uses: actions/upload-artifact@v4
         with:

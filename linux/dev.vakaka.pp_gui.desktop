@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=PP GUI
+Comment=Клиент протокола PP
+Exec=pp_gui
+Icon=dev.vakaka.pp_gui
+Type=Application
+Categories=Network;
+StartupNotify=true
+StartupWMClass=dev.vakaka.pp_gui

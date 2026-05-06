@@ -12,6 +12,8 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   file_selector: ^1.0.3
+  window_manager: ^0.5.1
+  tray_manager: ^0.5.2
 
 dev_dependencies:
   flutter_test:
@@ -19,3 +21,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/app_icon.png
+    - assets/app_icon_512.png
+    - assets/app_icon.ico

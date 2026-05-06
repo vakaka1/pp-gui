@@ -19,6 +19,26 @@ static void my_application_activate(GApplication* application) {
   gtk_window_set_title(window, "PP GUI");
   gtk_window_set_default_size(window, 430, 760);
 
+  // Set window icon (shown in taskbar and window title bar)
+  GError* icon_error = nullptr;
+  gchar* exec_dir = g_path_get_dirname(g_file_get_path(
+      g_file_new_for_path(g_get_current_dir())));
+  // Try relative to binary location first, then fallback paths
+  const gchar* icon_paths[] = {
+    "data/flutter_assets/assets/app_icon.png",
+    "../data/flutter_assets/assets/app_icon.png",
+    nullptr
+  };
+  for (int i = 0; icon_paths[i] != nullptr; i++) {
+    if (gtk_window_set_icon_from_file(window, icon_paths[i], &icon_error)) {
+      break;
+    }
+    if (icon_error) {
+      g_clear_error(&icon_error);
+    }
+  }
+  g_free(exec_dir);
+
   g_autoptr(FlDartProject) project = fl_dart_project_new();
   FlView* view = fl_view_new(project);
   gtk_widget_show(GTK_WIDGET(view));

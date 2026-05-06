@@ -15,7 +15,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 function(apply_standard_settings TARGET)
   target_compile_features(${TARGET} PUBLIC cxx_std_14)
-  target_compile_options(${TARGET} PRIVATE -Wall -Werror)
+  target_compile_options(${TARGET} PRIVATE -Wall -Werror -Wno-deprecated-declarations)
   target_compile_options(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:-O3>")
   target_compile_definitions(${TARGET} PRIVATE "$<$<NOT:$<CONFIG:Debug>>:NDEBUG>")
 endfunction()
