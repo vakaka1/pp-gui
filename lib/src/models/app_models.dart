@@ -1,6 +1,45 @@
 import 'dart:convert';
 import 'dart:io';
 
+/// Current GUI application version (synced with pubspec.yaml).
+const String appVersion = '0.1.0';
+
+/// Result of `pp-client test` command.
+class TestResult {
+  const TestResult({
+    required this.status,
+    required this.connectOk,
+    required this.pingOk,
+    required this.pingMs,
+    this.error,
+  });
+
+  final String status;
+  final bool connectOk;
+  final bool pingOk;
+  final int? pingMs;
+  final String? error;
+
+  bool get ok => status == 'ok' && connectOk && pingOk;
+
+  String get summary {
+    if (ok) {
+      return pingMs != null ? 'OK · ${pingMs} мс' : 'OK';
+    }
+    return 'N/A';
+  }
+
+  factory TestResult.fromJson(Map<String, dynamic> json) {
+    return TestResult(
+      status: (json['status'] ?? '').toString(),
+      connectOk: json['connect_ok'] == true,
+      pingOk: json['ping_ok'] == true,
+      pingMs: json['ping_ms'] is num ? (json['ping_ms'] as num).toInt() : null,
+      error: json['error']?.toString(),
+    );
+  }
+}
+
 enum PpCapability {
   validateConfig,
   importUri,
@@ -370,17 +409,20 @@ class AppSettings {
     required this.binaryPath,
     required this.fullTunnelOwner,
     required this.verboseLogs,
+    required this.selectedProfileId,
   });
 
   final String? binaryPath;
   final String fullTunnelOwner;
   final bool verboseLogs;
+  final String? selectedProfileId;
 
   factory AppSettings.defaults() {
     return const AppSettings(
       binaryPath: null,
       fullTunnelOwner: '',
       verboseLogs: false,
+      selectedProfileId: null,
     );
   }
 
@@ -389,6 +431,7 @@ class AppSettings {
       binaryPath: json['binary_path']?.toString(),
       fullTunnelOwner: (json['full_tunnel_owner'] ?? '').toString(),
       verboseLogs: json['verbose_logs'] == true,
+      selectedProfileId: json['selected_profile_id']?.toString(),
     );
   }
 
@@ -397,11 +440,16 @@ class AppSettings {
     bool clearBinaryPath = false,
     String? fullTunnelOwner,
     bool? verboseLogs,
+    String? selectedProfileId,
+    bool clearSelectedProfile = false,
   }) {
     return AppSettings(
       binaryPath: clearBinaryPath ? null : (binaryPath ?? this.binaryPath),
       fullTunnelOwner: fullTunnelOwner ?? this.fullTunnelOwner,
       verboseLogs: verboseLogs ?? this.verboseLogs,
+      selectedProfileId: clearSelectedProfile
+          ? null
+          : (selectedProfileId ?? this.selectedProfileId),
     );
   }
 
@@ -410,6 +458,7 @@ class AppSettings {
       'binary_path': binaryPath,
       'full_tunnel_owner': fullTunnelOwner,
       'verbose_logs': verboseLogs,
+      'selected_profile_id': selectedProfileId,
     };
   }
 }

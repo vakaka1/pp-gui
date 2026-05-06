@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux desktop dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang cmake ninja-build pkg-config libgtk-3-dev liblzma-dev
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Linux desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Build Linux
+        run: flutter build linux --release
+
+      - name: Package
+        run: |
+          cd build/linux/x64/release/bundle
+          tar -czf ${{ github.workspace }}/pp-gui_linux_amd64.tar.gz .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: pp-gui_linux_amd64.tar.gz
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Build Windows
+        run: flutter build windows --release
+
+      - name: Package
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath pp-gui_windows_amd64.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: pp-gui_windows_amd64.zip
+
+  release:
+    name: Create Release
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-build
+          path: artifacts
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: artifacts
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG_SHA=$(gh api repos/${{ github.repository }}/git/ref/tags/${{ github.ref_name }} --jq '.object.sha')
+          MSG=$(gh api repos/${{ github.repository }}/git/tags/$TAG_SHA --jq '.message' 2>/dev/null || echo "")
+          if [ -z "$MSG" ] || [ "$MSG" = "null" ]; then
+            MSG=$(git log -1 --format=%B)
+          fi
+          echo "$MSG" > release_notes.txt
+
+          gh release create ${{ github.ref_name }} \
+            --title "Release ${{ github.ref_name }}" \
+            --notes-file release_notes.txt \
+            --generate-notes \
+            artifacts/pp-gui_linux_amd64.tar.gz \
+            artifacts/pp-gui_windows_amd64.zip

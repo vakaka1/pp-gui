@@ -9,11 +9,25 @@ typedef DownloadProgress = void Function(int receivedBytes, int? totalBytes);
 
 class GitHubReleaseService {
   static const latestReleaseUrl = 'https://api.github.com/repos/vakaka1/pp/releases/latest';
+  static const guiLatestReleaseUrl = 'https://api.github.com/repos/vakaka1/pp-gui/releases/latest';
 
   Future<ReleaseInfo> fetchLatestRelease() async {
+    return _fetchRelease(latestReleaseUrl);
+  }
+
+  Future<ReleaseInfo?> fetchLatestGuiRelease() async {
+    try {
+      return await _fetchRelease(guiLatestReleaseUrl);
+    } on Object {
+      // GUI repo may not have releases yet.
+      return null;
+    }
+  }
+
+  Future<ReleaseInfo> _fetchRelease(String url) async {
     final client = HttpClient();
     try {
-      final request = await client.getUrl(Uri.parse(latestReleaseUrl));
+      final request = await client.getUrl(Uri.parse(url));
       request.headers.set(HttpHeaders.acceptHeader, 'application/vnd.github+json');
       request.headers.set(HttpHeaders.userAgentHeader, 'pp-gui');
       final response = await request.close().timeout(const Duration(seconds: 20));

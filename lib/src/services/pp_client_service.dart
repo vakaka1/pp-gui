@@ -114,6 +114,53 @@ class PpClientService {
         timeout: const Duration(seconds: 5));
   }
 
+  /// Runs `pp-client test` and parses `PP_CLIENT_TEST_RESULT` JSON.
+  Future<TestResult> testProfile(PpBinaryInfo binary, ProfileRef profile) async {
+    final args = <String>['test'];
+    if (profile.path != null) {
+      args.addAll(['--config', profile.path!]);
+    } else {
+      args.add(profile.name);
+    }
+    final result = await runCommand(binary.path!, args,
+        timeout: const Duration(seconds: 30));
+    final match =
+        RegExp(r'PP_CLIENT_TEST_RESULT\s+(\{.*\})').firstMatch(result.stdout);
+    if (match != null) {
+      try {
+        final json = jsonDecode(match.group(1)!) as Map<String, dynamic>;
+        return TestResult.fromJson(json);
+      } on Object {
+        // fall through
+      }
+    }
+    return TestResult(
+      status: result.ok ? 'ok' : 'error',
+      connectOk: false,
+      pingOk: false,
+      pingMs: null,
+      error: result.combinedOutput.trim().isEmpty
+          ? 'не удалось выполнить pp-client test'
+          : result.combinedOutput.trim(),
+    );
+  }
+
+  /// Runs `pp-client full-tunnel down` as safety cleanup.
+  Future<CommandResult> fullTunnelDown(PpBinaryInfo binary) {
+    if (Platform.isLinux) {
+      return runCommand('pkexec', [binary.path!, 'full-tunnel', 'down'],
+          timeout: const Duration(seconds: 15));
+    }
+    return runCommand(binary.path!, ['full-tunnel', 'down'],
+        timeout: const Duration(seconds: 15));
+  }
+
+  /// Runs `pp-client update`.
+  Future<CommandResult> ppClientUpdate(PpBinaryInfo binary) {
+    return runCommand(binary.path!, ['update'],
+        timeout: const Duration(seconds: 120));
+  }
+
   Future<List<ProfileRef>> listProfiles(PpBinaryInfo binary) async {
     if (!binary.canListProfiles || binary.path == null) {
       return const [];
@@ -202,28 +249,28 @@ class PpClientService {
 
     return Process.start(binary.path!, args, runInShell: false);
   }
-Future<void> stop(Process process, {ProfileRef? profile}) async {
-  if (Platform.isLinux) {
-    // Use SIGINT (-2) for graceful shutdown, it's safer for Go apps.
-    // Use the config path to target ONLY the specific process.
-    final configPath = profile?.path;
-    if (configPath != null && configPath.isNotEmpty) {
-      // We use pkexec to ensure we have permission to kill if it was started as root.
-      // Using -INT instead of -TERM helps to avoid 'close of closed channel' panic.
-      await _safeProcessRun('pkexec', ['pkill', '-INT', '-f', 'pp-client.*--config $configPath']);
+  Future<void> stop(Process process, {ProfileRef? profile, PpBinaryInfo? binary}) async {
+    if (Platform.isLinux) {
+      final configPath = profile?.path;
+      if (configPath != null && configPath.isNotEmpty) {
+        await _safeProcessRun('pkexec', ['pkill', '-INT', '-f', 'pp-client.*--config $configPath']);
+      }
+      process.kill();
+    } else if (Platform.isMacOS) {
+      await _safeProcessRun('osascript', [
+        '-e',
+        'do shell script "pkill -INT -f pp-client.*start.*--full-tunnel" with administrator privileges'
+      ]);
+    } else {
+      process.kill();
     }
 
-    // Also kill the pkexec wrapper itself
-    process.kill();
-  } else if (Platform.isMacOS) {
-    await _safeProcessRun('osascript', [
-      '-e',
-      'do shell script "pkill -INT -f pp-client.*start.*--full-tunnel" with administrator privileges'
-    ]);
-  } else {
-    process.kill();
+    // Safety cleanup: run full-tunnel down after stopping.
+    if (binary != null && binary.installed) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      await fullTunnelDown(binary);
+    }
   }
-}
   Future<CommandResult> runCommand(
     String executable,
     List<String> args, {
