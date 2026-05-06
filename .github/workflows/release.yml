@@ -24,7 +24,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             clang cmake ninja-build pkg-config \
-            libgtk-3-dev liblzma-dev makeself
+            libgtk-3-dev liblzma-dev makeself \
+            libayatana-appindicator3-dev
 
       - uses: subosito/flutter-action@v2
         with:

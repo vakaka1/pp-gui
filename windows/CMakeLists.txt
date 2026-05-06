@@ -5,6 +5,12 @@ set(BINARY_NAME "pp_gui")
 
 cmake_policy(VERSION 3.14...3.25)
 
+# Flutter internals (flutter_wrapper_app) require C++17 for std::variant/any/optional.
+# Setting it globally ensures ALL targets — including generated ones — compile with C++17.
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 set(CMAKE_CONFIGURATION_TYPES "Debug;Profile;Release" CACHE STRING "" FORCE)
 
 set(CMAKE_EXE_LINKER_FLAGS_PROFILE "${CMAKE_EXE_LINKER_FLAGS_RELEASE}")
