@@ -1,8 +1,5 @@
-# PP GUI
 
-[![Release](https://img.shields.io/github/v/release/vakaka1/pp-gui?style=flat-square)](https://github.com/vakaka1/pp-gui/releases/latest)
-[![CI](https://img.shields.io/github/actions/workflow/status/vakaka1/pp-gui/ci.yml?branch=main&style=flat-square&label=CI)](https://github.com/vakaka1/pp-gui/actions)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+# PP GUI
 
 Эталонное графическое приложение для работы и проверки протокола [`PP`](https://github.com/vakaka1/pp).  
 Написано на Flutter, работает на **Linux** и **Windows**. Является оболочкой над `pp-client`.
