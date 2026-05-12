@@ -13,53 +13,49 @@ class WindowManagerService with WindowListener, TrayListener {
   bool _trayReady = false;
 
   Future<void> initialize() async {
-    await windowManager.ensureInitialized().timeout(const Duration(seconds: 2));
-    windowManager.addListener(this);
-
-    // Set window icon (affects some window managers / taskbars)
-    if (!Platform.isWindows) {
-      try {
-        await windowManager
-            .setIcon('assets/app_icon.png')
-            .timeout(const Duration(seconds: 2));
-      } on Object catch (e) {
-        debugPrint('setIcon failed (non-fatal): $e');
-      }
+    debugPrint('WindowManagerService: starting initialization...');
+    try {
+      await windowManager.ensureInitialized().timeout(const Duration(seconds: 4));
+      windowManager.addListener(this);
+      debugPrint('WindowManagerService: windowManager initialized');
+    } on Object catch (e) {
+      debugPrint('WindowManagerService: windowManager.ensureInitialized failed: $e');
     }
 
     // Tray initialisation is optional — the app must work even if it fails.
     try {
       trayManager.addListener(this);
-      await _initTray().timeout(const Duration(seconds: 3));
+      // ... (rest of icon logic)
+      // Construct absolute path for Windows icon
+      String iconPath;
+      if (Platform.isWindows) {
+        final exeDir = File(Platform.resolvedExecutable).parent.path;
+        iconPath = '$exeDir\\data\\flutter_assets\\assets\\app_icon.ico';
+        if (!await File(iconPath).exists()) {
+          iconPath = 'assets/app_icon.ico';
+        }
+      } else {
+        iconPath = 'assets/app_icon_512.png';
+      }
+
+      await trayManager.setIcon(iconPath).timeout(const Duration(seconds: 3));
+      
+      final menu = Menu(
+        items: [
+          MenuItem(key: 'show_window', label: 'Показать окно'),
+          MenuItem.separator(),
+          MenuItem(key: 'exit_app', label: 'Выход'),
+        ],
+      );
+      await trayManager.setContextMenu(menu).timeout(const Duration(seconds: 2));
+      
       await windowManager.setPreventClose(true);
       _trayReady = true;
     } on Object catch (e) {
-      debugPrint('Tray init failed (non-fatal): $e');
+      debugPrint('Tray/Window extra init failed (non-fatal): $e');
     }
 
     _initialized = true;
-  }
-
-  Future<void> _initTray() async {
-    // Use 512px icon for tray for maximum sharpness
-    String iconPath =
-        Platform.isWindows ? 'assets/app_icon.ico' : 'assets/app_icon_512.png';
-    await trayManager.setIcon(iconPath);
-
-    Menu menu = Menu(
-      items: [
-        MenuItem(
-          key: 'show_window',
-          label: 'Показать окно',
-        ),
-        MenuItem.separator(),
-        MenuItem(
-          key: 'exit_app',
-          label: 'Выход',
-        ),
-      ],
-    );
-    await trayManager.setContextMenu(menu);
   }
 
   @override

@@ -67,6 +67,9 @@ void Win32Window::OnDestroy() {}
 LRESULT Win32Window::MessageHandler(HWND window, UINT const message, WPARAM const wparam,
                                     LPARAM const lparam) noexcept {
   switch (message) {
+    case WM_CREATE:
+      return OnCreate() ? 0 : -1;
+
     case WM_DESTROY:
       window_handle_ = nullptr;
       OnDestroy();

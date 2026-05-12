@@ -3,25 +3,32 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import 'package:window_manager/window_manager.dart';
+
 import 'src/services/window_manager_service.dart';
 import 'src/ui/app_shell.dart';
 import 'src/ui/theme.dart';
 
 void main() {
+  debugPrint('--- APP STARTING ---');
+  // Ensure Flutter is ready.
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Run the app immediately.
   runApp(const PpGuiApp());
 
-  // Window/tray initialisation must never block the first Flutter frame.
+  // All window-related initialization must happen after the app starts 
+  // and must not block the main execution flow.
   WidgetsBinding.instance.addPostFrameCallback((_) {
-    unawaited(_initializeWindowService());
+    debugPrint('--- POST FRAME CALLBACK ---');
+    _initializeWindowService();
   });
 }
 
 Future<void> _initializeWindowService() async {
   try {
     final windowService = WindowManagerService();
-    await windowService.initialize().timeout(const Duration(seconds: 5));
+    await windowService.initialize().timeout(const Duration(seconds: 10));
   } on Object catch (e) {
     debugPrint('Window/tray init failed (non-fatal): $e');
   }

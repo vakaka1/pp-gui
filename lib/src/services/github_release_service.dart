@@ -88,10 +88,55 @@ class PpClientInstaller {
         throw FileSystemException('Размер скачанного файла не совпадает с ожидаемым', tempFile.path);
       }
 
-      if (await target.exists()) {
-        await target.delete();
+      if (asset.name.toLowerCase().endsWith('.zip')) {
+        // Handle ZIP archive (common for Windows releases)
+        final extractDir = await Directory.systemTemp.createTemp('pp-client-extract-');
+        try {
+          if (Platform.isWindows) {
+            final result = await Process.run('powershell', [
+              '-NoProfile',
+              '-NonInteractive',
+              '-Command',
+              'Expand-Archive -Force -Path "${tempFile.path}" -DestinationPath "${extractDir.path}"'
+            ]);
+            if (result.exitCode != 0) {
+              throw ProcessException('powershell', ['Expand-Archive'], result.stderr.toString(), result.exitCode);
+            }
+          } else {
+            // Fallback for other platforms if they use ZIP
+            final result = await Process.run('unzip', ['-o', tempFile.path, '-d', extractDir.path]);
+            if (result.exitCode != 0) {
+              throw ProcessException('unzip', [tempFile.path], result.stderr.toString(), result.exitCode);
+            }
+          }
+
+          // Find the actual binary in the extracted files
+          final files = await extractDir.list(recursive: true).toList();
+          final binary = files.whereType<File>().where((f) {
+            final name = f.path.split(Platform.pathSeparator).last.toLowerCase();
+            return name == 'pp-client.exe' || name == 'pp-client';
+          }).firstOrNull;
+
+          if (binary == null) {
+            throw FileSystemException('Исполняемый файл не найден в архиве', asset.name);
+          }
+
+          if (await target.exists()) {
+            await target.delete();
+          }
+          await binary.rename(target.path);
+        } finally {
+          try {
+            await extractDir.delete(recursive: true);
+          } on Object {/* ignore */}
+        }
+      } else {
+        // Direct binary download (common for Linux)
+        if (await target.exists()) {
+          await target.delete();
+        }
+        await tempFile.rename(target.path);
       }
-      await tempFile.rename(target.path);
 
       if (!Platform.isWindows) {
         await Process.run('chmod', ['755', target.path]);

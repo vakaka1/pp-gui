@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
+
 import '../models/app_models.dart';
 import 'app_paths.dart';
 
@@ -16,6 +18,19 @@ class PpClientService {
         commit: null,
         capabilities: {},
         error: 'pp-client не найден в PATH или стандартных местах установки',
+      );
+    }
+
+    // Secondary safety check: ensure the file is still a valid EXE 
+    // before we attempt to execute it.
+    if (!await _isValidBinary(File(resolvedPath))) {
+      return PpBinaryInfo(
+        path: resolvedPath,
+        version: null,
+        buildDate: null,
+        commit: null,
+        capabilities: {},
+        error: 'Файл не является корректным исполняемым файлом Windows (возможно, поврежден или это архив)',
       );
     }
 
@@ -70,7 +85,8 @@ class PpClientService {
   Future<String?> resolveBinaryPath({String? preferredPath}) async {
     if (preferredPath != null && preferredPath.trim().isNotEmpty) {
       final file = File(preferredPath.trim());
-      if (await file.exists()) {
+      if (await file.exists() && await _isValidBinary(file)) {
+        print('Using preferred path: ${file.path}');
         return file.path;
       }
     }
@@ -78,26 +94,54 @@ class PpClientService {
     final command = Platform.isWindows ? 'where' : 'which';
     final lookup = await _safeProcessRun(command, const ['pp-client']);
     if (lookup.ok) {
-      final first = const LineSplitter()
+      final lines = const LineSplitter()
           .convert(lookup.stdout)
-          .where((line) => line.trim().isNotEmpty)
-          .firstOrNull;
-      if (first != null) {
-        return first.trim();
+          .where((line) => line.trim().isNotEmpty);
+      for (final line in lines) {
+        final file = File(line.trim());
+        if (await file.exists() && await _isValidBinary(file)) {
+          print('Found valid binary via $command: ${file.path}');
+          return file.path;
+        }
       }
     }
 
     final common = <String>[
       AppPaths.defaultInstallTarget().path,
+      if (Platform.isWindows) ...[
+        AppPaths.join(Platform.environment['LOCALAPPDATA'] ?? '', 'pp\\pp-client.exe'),
+        AppPaths.join(Platform.environment['LOCALAPPDATA'] ?? '', 'PP\\pp-client.exe'),
+      ],
       if (!Platform.isWindows) '/usr/local/bin/pp-client',
       if (!Platform.isWindows) '/usr/bin/pp-client',
     ];
     for (final path in common) {
-      if (await File(path).exists()) {
-        return path;
+      final file = File(path);
+      if (await file.exists() && await _isValidBinary(file)) {
+        print('Found valid binary in common path: ${file.path}');
+        return file.path;
       }
     }
+    
+    print('No valid pp-client binary found');
     return null;
+  }
+
+  Future<bool> _isValidBinary(File file) async {
+    if (!Platform.isWindows) return true;
+    RandomAccessFile? raf;
+    try {
+      if (await file.length() < 2) return false;
+      raf = await file.open(mode: FileMode.read);
+      final header = await raf.read(2);
+      // Check for 'MZ' header
+      return header.length == 2 && header[0] == 0x4D && header[1] == 0x5A;
+    } on Object catch (e) {
+      print('Error checking binary validity for ${file.path}: $e');
+      return false;
+    } finally {
+      await raf?.close();
+    }
   }
 
   Future<CommandResult> validateConfig(PpBinaryInfo binary, String configPath) {
@@ -295,16 +339,39 @@ class PpClientService {
     Duration timeout = const Duration(seconds: 8),
   }) async {
     try {
+      // Use null encoding to get raw bytes and decode manually to handle 
+      // potential encoding mismatches between pp-client (UTF-8) and 
+      // Windows system commands (OEM CP like 866).
       final result = await Process.run(
         executable,
         args,
-        stdoutEncoding: utf8,
-        stderrEncoding: utf8,
+        stdoutEncoding: null,
+        stderrEncoding: null,
       ).timeout(timeout);
+
+      final stdoutBytes = result.stdout as List<int>? ?? const [];
+      final stderrBytes = result.stderr as List<int>? ?? const [];
+
+      String decode(List<int> bytes) {
+        if (bytes.isEmpty) return '';
+        try {
+          // Attempt UTF-8 first (standard for pp-client and modern tools)
+          return utf8.decode(bytes);
+        } on Object {
+          try {
+            // Fallback to system encoding (CP866/CP1251 on Russian Windows for ping/where)
+            return systemEncoding.decode(bytes);
+          } on Object {
+            // Last resort: latin1 which never fails for any byte sequence
+            return latin1.decode(bytes);
+          }
+        }
+      }
+
       return CommandResult(
         exitCode: result.exitCode,
-        stdout: result.stdout?.toString() ?? '',
-        stderr: result.stderr?.toString() ?? '',
+        stdout: decode(stdoutBytes),
+        stderr: decode(stderrBytes),
       );
     } on TimeoutException {
       return CommandResult(

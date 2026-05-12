@@ -203,13 +203,18 @@ find "${destDir.path}" -name '*.so' -exec chmod 755 {} +
   /// Extracts [archive] (zip) into [destDir], replacing existing files.
   /// Uses PowerShell's Expand-Archive on Windows (available since Win10).
   Future<void> _extractZip(File archive, Directory destDir) async {
+    // We use single quotes for paths inside the PowerShell command to avoid 
+    // issues with spaces and special characters like $.
+    final psCommand = 
+        'Expand-Archive -Force -Path \'${archive.path}\' -DestinationPath \'${destDir.path}\'';
+    
     final result = await Process.run(
       'powershell',
       [
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        'Expand-Archive -Force -Path "${archive.path}" -DestinationPath "${destDir.path}"',
+        psCommand,
       ],
     );
     if (result.exitCode != 0) {

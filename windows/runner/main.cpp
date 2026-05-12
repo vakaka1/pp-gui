@@ -15,7 +15,7 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   (void)prev;
   (void)command_line;
 
-  if (!::AttachConsole(ATTACH_PARENT_PROCESS) && ::IsDebuggerPresent()) {
+  if (!::AttachConsole(ATTACH_PARENT_PROCESS)) {
     CreateAndAttachConsole();
   }
 
