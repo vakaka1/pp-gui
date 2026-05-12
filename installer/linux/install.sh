@@ -19,6 +19,10 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 echo "[1/4] Installing application to $INSTALL_DIR ..."
+# Remove previous installation to avoid file-vs-directory conflicts on upgrade
+if [ -d "$INSTALL_DIR" ]; then
+  rm -rf "$INSTALL_DIR"
+fi
 mkdir -p "$INSTALL_DIR"
 # makeself executes the script from the extraction directory, so we can use current dir
 cp -r . "$INSTALL_DIR/"

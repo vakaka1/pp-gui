@@ -111,25 +111,72 @@ class GuiUpdater {
     }
   }
 
-  /// Extracts [archive] (tar.gz) into [destDir], replacing existing files.
-  Future<void> _extractTarGz(File archive, Directory destDir) async {
-    final result = await Process.run(
-      'tar',
-      ['--overwrite', '-xzf', archive.path, '-C', destDir.path],
-    );
-    if (result.exitCode != 0) {
-      throw ProcessException(
-        'tar',
-        ['--overwrite', '-xzf', archive.path, '-C', destDir.path],
-        '${result.stdout}\n${result.stderr}'.trim(),
-        result.exitCode,
-      );
+  /// Checks whether [dir] is writable by the current user.
+  Future<bool> _isWritable(Directory dir) async {
+    try {
+      final probe = File('${dir.path}/.update_probe_${pid}');
+      await probe.writeAsString('');
+      await probe.delete();
+      return true;
+    } on FileSystemException {
+      return false;
     }
+  }
 
-    // Ensure the main executable is still executable.
-    final exe = File('${destDir.path}/pp_gui');
-    if (await exe.exists()) {
-      await Process.run('chmod', ['755', exe.path]);
+  /// Extracts [archive] (tar.gz) into [destDir], replacing existing files.
+  ///
+  /// When the install directory is not writable (e.g. `/opt/pp-gui` owned by
+  /// root), the extraction is run through `pkexec` so the user gets a
+  /// graphical privilege-elevation prompt.  Old files are removed first to
+  /// avoid file-vs-directory type conflicts on upgrade.
+  Future<void> _extractTarGz(File archive, Directory destDir) async {
+    final needsRoot = !await _isWritable(destDir);
+
+    if (needsRoot) {
+      // Build a small inline script that cleans the target, extracts,
+      // and fixes permissions — all under a single pkexec invocation.
+      final script = '''
+rm -rf "${destDir.path}"
+mkdir -p "${destDir.path}"
+tar -xzf "${archive.path}" -C "${destDir.path}"
+chmod 755 "${destDir.path}/pp_gui"
+''';
+      final result = await Process.run(
+        'pkexec',
+        ['bash', '-c', script],
+      );
+      if (result.exitCode != 0) {
+        throw ProcessException(
+          'pkexec',
+          ['bash', '-c', '...'],
+          '${result.stdout}\n${result.stderr}'.trim(),
+          result.exitCode,
+        );
+      }
+    } else {
+      // User-writable directory — clean and extract directly.
+      if (await destDir.exists()) {
+        await destDir.delete(recursive: true);
+        await destDir.create(recursive: true);
+      }
+      final result = await Process.run(
+        'tar',
+        ['-xzf', archive.path, '-C', destDir.path],
+      );
+      if (result.exitCode != 0) {
+        throw ProcessException(
+          'tar',
+          ['-xzf', archive.path, '-C', destDir.path],
+          '${result.stdout}\n${result.stderr}'.trim(),
+          result.exitCode,
+        );
+      }
+
+      // Ensure the main executable is still executable.
+      final exe = File('${destDir.path}/pp_gui');
+      if (await exe.exists()) {
+        await Process.run('chmod', ['755', exe.path]);
+      }
     }
   }
 

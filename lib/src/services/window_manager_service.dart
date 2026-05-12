@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 
@@ -7,19 +8,32 @@ class WindowManagerService with WindowListener, TrayListener {
   factory WindowManagerService() => _instance;
   WindowManagerService._internal();
 
+  bool _initialized = false;
+
   Future<void> initialize() async {
     await windowManager.ensureInitialized();
     windowManager.addListener(this);
-    trayManager.addListener(this);
 
     await windowManager.setPreventClose(true);
 
     // Set window icon (affects some window managers / taskbars)
     if (!Platform.isWindows) {
-      await windowManager.setIcon('assets/app_icon.png');
+      try {
+        await windowManager.setIcon('assets/app_icon.png');
+      } on Object catch (e) {
+        debugPrint('setIcon failed (non-fatal): $e');
+      }
     }
 
-    await _initTray();
+    // Tray initialisation is optional — the app must work even if it fails.
+    try {
+      trayManager.addListener(this);
+      await _initTray();
+    } on Object catch (e) {
+      debugPrint('Tray init failed (non-fatal): $e');
+    }
+
+    _initialized = true;
   }
 
   Future<void> _initTray() async {
@@ -45,6 +59,7 @@ class WindowManagerService with WindowListener, TrayListener {
 
   @override
   void onWindowClose() async {
+    if (!_initialized) return;
     bool isPreventClose = await windowManager.isPreventClose();
     if (isPreventClose) {
       await windowManager.hide();
