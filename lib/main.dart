@@ -1,3 +1,4 @@
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -6,20 +7,24 @@ import 'src/services/window_manager_service.dart';
 import 'src/ui/app_shell.dart';
 import 'src/ui/theme.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Window/tray initialisation must not prevent the app from starting.
-  // If any platform plugin fails (missing DLL, permission, etc.) we still
-  // show the main UI so the user can at least see an error or use the app.
+  runApp(const PpGuiApp());
+
+  // Window/tray initialisation must never block the first Flutter frame.
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    unawaited(_initializeWindowService());
+  });
+}
+
+Future<void> _initializeWindowService() async {
   try {
     final windowService = WindowManagerService();
-    await windowService.initialize();
+    await windowService.initialize().timeout(const Duration(seconds: 5));
   } on Object catch (e) {
     debugPrint('Window/tray init failed (non-fatal): $e');
   }
-
-  runApp(const PpGuiApp());
 }
 
 class PpGuiApp extends StatelessWidget {
