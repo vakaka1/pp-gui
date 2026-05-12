@@ -139,7 +139,10 @@ class GuiUpdater {
 rm -rf "${destDir.path}"
 mkdir -p "${destDir.path}"
 tar -xzf "${archive.path}" -C "${destDir.path}"
+find "${destDir.path}" -type d -exec chmod 755 {} +
+find "${destDir.path}" -type f -exec chmod 644 {} +
 chmod 755 "${destDir.path}/pp_gui"
+find "${destDir.path}" -name '*.so' -exec chmod 755 {} +
 ''';
       final result = await Process.run(
         'pkexec',
@@ -172,10 +175,27 @@ chmod 755 "${destDir.path}/pp_gui"
         );
       }
 
-      // Ensure the main executable is still executable.
-      final exe = File('${destDir.path}/pp_gui');
-      if (await exe.exists()) {
-        await Process.run('chmod', ['755', exe.path]);
+      await _fixLinuxPermissions(destDir);
+    }
+  }
+
+  Future<void> _fixLinuxPermissions(Directory destDir) async {
+    final commands = <List<String>>[
+      ['find', destDir.path, '-type', 'd', '-exec', 'chmod', '755', '{}', '+'],
+      ['find', destDir.path, '-type', 'f', '-exec', 'chmod', '644', '{}', '+'],
+      ['chmod', '755', '${destDir.path}/pp_gui'],
+      ['find', destDir.path, '-name', '*.so', '-exec', 'chmod', '755', '{}', '+'],
+    ];
+
+    for (final command in commands) {
+      final result = await Process.run(command.first, command.skip(1).toList());
+      if (result.exitCode != 0) {
+        throw ProcessException(
+          command.first,
+          command.skip(1).toList(),
+          '${result.stdout}\n${result.stderr}'.trim(),
+          result.exitCode,
+        );
       }
     }
   }

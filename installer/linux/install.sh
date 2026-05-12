@@ -28,7 +28,14 @@ mkdir -p "$INSTALL_DIR"
 cp -r . "$INSTALL_DIR/"
 # remove the installer script itself from the final destination
 rm -f "$INSTALL_DIR/install.sh"
+# Fix permissions: makeself extracts with restrictive umask (0700),
+# so all dirs/files end up unreadable by non-root users.
+chmod 755 "$INSTALL_DIR"
+find "$INSTALL_DIR" -type d -exec chmod 755 {} +
+find "$INSTALL_DIR" -type f -exec chmod 644 {} +
 chmod 755 "$INSTALL_DIR/pp_gui"
+# Shared libraries must also be executable
+find "$INSTALL_DIR" -name '*.so' -exec chmod 755 {} +
 
 echo "[2/4] Creating launcher symlink at $BIN_LINK ..."
 ln -sf "$INSTALL_DIR/pp_gui" "$BIN_LINK"
