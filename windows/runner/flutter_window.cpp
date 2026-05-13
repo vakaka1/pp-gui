@@ -18,6 +18,7 @@ bool FlutterWindow::OnCreate() {
   flutter_controller_ = std::make_unique<flutter::FlutterViewController>(
       frame.right - frame.left, frame.bottom - frame.top, project_);
   if (!flutter_controller_->engine() || !flutter_controller_->view()) {
+    MessageBox(nullptr, L"Failed to create Flutter view controller. This often happens if 'flutter_windows.dll' or 'icudtl.dat' are missing.", L"PP GUI Error", MB_ICONERROR);
     return false;
   }
   RegisterPlugins(flutter_controller_->engine());
