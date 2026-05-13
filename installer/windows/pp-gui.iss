@@ -54,6 +54,7 @@ end;
 function InitializeSetup(): Boolean;
 var
   VC2015to2022x64: string;
+  ErrorCode: Integer;
 begin
   Result := True;
   VC2015to2022x64 := '{14C61D60-1729-4AD0-A442-263D7E7D906E}'; // Microsoft Visual C++ 2015-2022 Redistributable (x64)
@@ -64,8 +65,10 @@ begin
     begin
       // Note: In a real CI environment, you'd download the installer or include it.
       // For now, we'll just open the download page.
-      ShellExec('open', 'https://aka.ms/vs/17/release/vc_redist.x64.exe', '', '', SW_SHOWNORMAL, ewNoWait, VC2015to2022x64);
-      MsgBox('Пожалуйста, установите Visual C++ Redistributable и запустите установку приложения снова.', mbInformation, MB_OK);
+      if not ShellExec('open', 'https://aka.ms/vs/17/release/vc_redist.x64.exe', '', '', SW_SHOWNORMAL, ewNoWait, ErrorCode) then
+      begin
+        MsgBox('Не удалось открыть ссылку для скачивания. Пожалуйста, установите Visual C++ Redistributable вручную.', mbError, MB_OK);
+      end;
       Result := False;
     end;
   end;
