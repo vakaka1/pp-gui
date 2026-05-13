@@ -86,7 +86,7 @@ class PpClientService {
     if (preferredPath != null && preferredPath.trim().isNotEmpty) {
       final file = File(preferredPath.trim());
       if (await file.exists() && await _isValidBinary(file)) {
-        print('Using preferred path: ${file.path}');
+        debugPrint('Using preferred path: ${file.path}');
         return file.path;
       }
     }
@@ -100,7 +100,7 @@ class PpClientService {
       for (final line in lines) {
         final file = File(line.trim());
         if (await file.exists() && await _isValidBinary(file)) {
-          print('Found valid binary via $command: ${file.path}');
+          debugPrint('Found valid binary via $command: ${file.path}');
           return file.path;
         }
       }
@@ -118,12 +118,12 @@ class PpClientService {
     for (final path in common) {
       final file = File(path);
       if (await file.exists() && await _isValidBinary(file)) {
-        print('Found valid binary in common path: ${file.path}');
+        debugPrint('Found valid binary in common path: ${file.path}');
         return file.path;
       }
     }
     
-    print('No valid pp-client binary found');
+    debugPrint('No valid pp-client binary found');
     return null;
   }
 
@@ -137,7 +137,7 @@ class PpClientService {
       // Check for 'MZ' header
       return header.length == 2 && header[0] == 0x4D && header[1] == 0x5A;
     } on Object catch (e) {
-      print('Error checking binary validity for ${file.path}: $e');
+      debugPrint('Error checking binary validity for ${file.path}: $e');
       return false;
     } finally {
       await raf?.close();

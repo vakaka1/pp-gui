@@ -3,8 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'package:window_manager/window_manager.dart';
-
 import 'src/services/window_manager_service.dart';
 import 'src/ui/app_shell.dart';
 import 'src/ui/theme.dart';
