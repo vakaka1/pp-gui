@@ -34,11 +34,14 @@ class WindowManagerService with WindowListener, TrayListener {
         if (!await File(iconPath).exists()) {
           iconPath = 'assets/app_icon.ico';
         }
-      } else {
+      } else if (Platform.isLinux) {
         iconPath = 'assets/app_icon_512.png';
+      } else {
+        iconPath = 'assets/app_icon.png';
       }
 
       await trayManager.setIcon(iconPath).timeout(const Duration(seconds: 3));
+      await windowManager.setIcon(iconPath).timeout(const Duration(seconds: 3));
       
       final menu = Menu(
         items: [

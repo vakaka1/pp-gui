@@ -2,6 +2,8 @@
 
 #include <dwmapi.h>
 
+#include "resource.h"
+
 namespace {
 
 constexpr const wchar_t kWindowClassName[] = L"PPGUIWindow";
@@ -27,6 +29,24 @@ bool Win32Window::Create(const std::wstring& title, const Point& origin, const S
   window_handle_ = CreateWindow(
       kWindowClassName, title.c_str(), style, frame.left, frame.top, frame.right - frame.left,
       frame.bottom - frame.top, nullptr, nullptr, GetModuleHandle(nullptr), this);
+
+  if (window_handle_) {
+    HINSTANCE instance = GetModuleHandle(nullptr);
+    HICON big_icon = reinterpret_cast<HICON>(
+        LoadImage(instance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+                  GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON),
+                  LR_DEFAULTCOLOR));
+    HICON small_icon = reinterpret_cast<HICON>(
+        LoadImage(instance, MAKEINTRESOURCE(IDI_APP_ICON), IMAGE_ICON,
+                  GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON),
+                  LR_DEFAULTCOLOR));
+    if (big_icon) {
+      SendMessage(window_handle_, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(big_icon));
+    }
+    if (small_icon) {
+      SendMessage(window_handle_, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(small_icon));
+    }
+  }
 
   return window_handle_ != nullptr;
 }
@@ -120,7 +140,7 @@ const wchar_t* Win32Window::WindowClassRegistrar() {
     window_class.cbClsExtra = 0;
     window_class.cbWndExtra = 0;
     window_class.hInstance = GetModuleHandle(nullptr);
-    window_class.hIcon = LoadIcon(nullptr, IDI_APPLICATION);
+    window_class.hIcon = LoadIcon(window_class.hInstance, MAKEINTRESOURCE(IDI_APP_ICON));
     window_class.hbrBackground = nullptr;
     window_class.lpfnWndProc = Win32Window::WndProc;
     RegisterClass(&window_class);
