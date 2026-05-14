@@ -98,9 +98,17 @@ jobs:
       - name: Diagnostics - List build output
         shell: pwsh
         run: |
-          Get-ChildItem -Path build\windows\x64\runner\Release -Recurse
-          if (-not (Test-Path "build\windows\x64\runner\Release\data")) { Write-Error "Data folder missing!" }
-          if (-not (Test-Path "build\windows\x64\runner\Release\flutter_windows.dll")) { Write-Error "flutter_windows.dll missing!" }
+          $releaseDir = "build\windows\x64\runner\Release"
+          Get-ChildItem -Path $releaseDir -Recurse
+          if (-not (Test-Path "$releaseDir\data")) { throw "Data folder missing!" }
+          if (-not (Test-Path "$releaseDir\flutter_windows.dll")) { throw "flutter_windows.dll missing!" }
+
+      - name: Download VC++ Redistributable
+        shell: pwsh
+        run: |
+          $releaseDir = "build\windows\x64\runner\Release"
+          Write-Host "Downloading VC++ Redistributable installer..."
+          Invoke-WebRequest -Uri "https://aka.ms/vs/17/release/vc_redist.x64.exe" -OutFile "$releaseDir\vc_redist.x64.exe"
 
       # ---- Archive (.zip) — used by in-app GUI auto-update ------------------
       - name: Package zip (Portable / In-app update)
@@ -110,9 +118,11 @@ jobs:
             Это портативная версия PP GUI.
             Для запуска просто распакуйте все файлы в любую папку и запустите pp_gui.exe.
 
-            ВАЖНО: Если программа не запускается, возможно вам нужно установить
-            Microsoft Visual C++ 2015-2022 Redistributable (x64).
-            Вы можете скачать его здесь: https://aka.ms/vs/17/release/vc_redist.x64.exe
+            ВАЖНО: Если программа выдает ошибку "Failed to create view controller", 
+            вам необходимо установить Microsoft Visual C++ 2015-2022 Redistributable.
+            Мы уже включили его в этот архив для вашего удобства.
+            
+            ПРОСТО ЗАПУСТИТЕ ФАЙЛ: vc_redist.x64.exe
         run: |
           $bundleDir = "build\windows\x64\runner\Release"
           $readmePath = "$bundleDir\README.txt"
