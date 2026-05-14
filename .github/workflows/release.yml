@@ -95,18 +95,18 @@ jobs:
       # ---- Archive (.zip) — used by in-app GUI auto-update ------------------
       - name: Package zip (Portable / In-app update)
         shell: pwsh
+        env:
+          README_TEXT: |
+            Это портативная версия PP GUI.
+            Для запуска просто распакуйте все файлы в любую папку и запустите pp_gui.exe.
+
+            ВАЖНО: Если программа не запускается, возможно вам нужно установить
+            Microsoft Visual C++ 2015-2022 Redistributable (x64).
+            Вы можете скачать его здесь: https://aka.ms/vs/17/release/vc_redist.x64.exe
         run: |
           $bundleDir = "build\windows\x64\runner\Release"
           $readmePath = "$bundleDir\README.txt"
-          $readmeContent = @"
-Это портативная версия PP GUI.
-Для запуска просто распакуйте все файлы в любую папку и запустите pp_gui.exe.
-
-ВАЖНО: Если программа не запускается, возможно вам нужно установить
-Microsoft Visual C++ 2015-2022 Redistributable (x64).
-Вы можете скачать его здесь: https://aka.ms/vs/17/release/vc_redist.x64.exe
-"@
-          $readmeContent | Out-File -FilePath $readmePath -Encoding utf8
+          $env:README_TEXT | Out-File -FilePath $readmePath -Encoding utf8
           
           Compress-Archive `
             -Path "$bundleDir\*" `
