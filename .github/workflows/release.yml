@@ -99,6 +99,8 @@ jobs:
         shell: pwsh
         run: |
           Get-ChildItem -Path build\windows\x64\runner\Release -Recurse
+          if (-not (Test-Path "build\windows\x64\runner\Release\data")) { Write-Error "Data folder missing!" }
+          if (-not (Test-Path "build\windows\x64\runner\Release\flutter_windows.dll")) { Write-Error "flutter_windows.dll missing!" }
 
       # ---- Archive (.zip) — used by in-app GUI auto-update ------------------
       - name: Package zip (Portable / In-app update)
@@ -116,9 +118,10 @@ jobs:
           $readmePath = "$bundleDir\README.txt"
           $env:README_TEXT | Out-File -FilePath $readmePath -Encoding utf8
           
+          # Force inclusion of all files in the Release directory
           Compress-Archive `
             -Path "$bundleDir\*" `
-            -DestinationPath "pp-gui-${{ github.ref_name }}-windows-portable.zip"
+            -DestinationPath "pp-gui-${{ github.ref_name }}-windows-portable.zip" -Force
 
       # ---- Inno Setup .exe installer ----------------------------------------
       - name: Prepare Inno Setup bundle directory
