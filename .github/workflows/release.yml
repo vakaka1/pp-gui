@@ -78,10 +78,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: subosito/flutter-action@v2.18.0
-        with:
-          channel: stable
-          cache: true
+      - name: Install Flutter manually
+        shell: pwsh
+        run: |
+          git clone https://github.com/flutter/flutter.git -b stable --depth 1 $env:USERPROFILE\flutter
+          $env:Path += ";$env:USERPROFILE\flutter\bin"
+          flutter doctor
+          echo "$env:USERPROFILE\flutter\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Enable Windows desktop
         run: flutter config --enable-windows-desktop
@@ -91,6 +94,11 @@ jobs:
 
       - name: Build Windows
         run: flutter build windows --release
+
+      - name: Diagnostics - List build output
+        shell: pwsh
+        run: |
+          Get-ChildItem -Path build\windows\x64\runner\Release -Recurse
 
       # ---- Archive (.zip) — used by in-app GUI auto-update ------------------
       - name: Package zip (Portable / In-app update)
