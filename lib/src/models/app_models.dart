@@ -166,9 +166,13 @@ class ReleaseInfo {
     if (Platform.isWindows) {
       final candidates = assets.where((asset) {
         final name = asset.name.toLowerCase();
-        return name.contains('pp-client') && name.contains('windows');
-      });
-      return candidates.firstOrNull;
+        // Look for any windows binary or zip containing pp-client
+        return name.contains('pp-client') &&
+            (name.contains('windows') || name.endsWith('.exe') || name.endsWith('.zip'));
+      }).toList();
+      // Prefer ZIP if available, otherwise take the first EXE
+      return candidates.where((a) => a.name.toLowerCase().endsWith('.zip')).firstOrNull ??
+          candidates.firstOrNull;
     }
     return null;
   }

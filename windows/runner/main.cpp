@@ -15,10 +15,6 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   (void)prev;
   (void)command_line;
 
-  if (!::AttachConsole(ATTACH_PARENT_PROCESS)) {
-    CreateAndAttachConsole();
-  }
-
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
 
   // Get the executable directory to find the "data" folder.

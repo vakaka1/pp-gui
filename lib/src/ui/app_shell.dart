@@ -38,7 +38,7 @@ class _AppShellState extends State<AppShell> {
   ReleaseInfo? _latestGuiRelease;
   List<ProfileRef> _profileList = const [];
   ProfileRef? _selectedProfile;
-  Process? _clientProcess;
+  PpClientProcess? _clientProcess;
   StreamSubscription<String>? _stdoutSub;
   StreamSubscription<String>? _stderrSub;
 
@@ -51,6 +51,7 @@ class _AppShellState extends State<AppShell> {
   bool _updatingGui = false;
   bool _serverConnected = false;
   bool _stopRequested = false;
+  bool _adminElevationStarted = false;
   bool _isTesting = false;
   double? _installProgress;
   double? _guiUpdateProgress;
@@ -92,8 +93,7 @@ class _AppShellState extends State<AppShell> {
       _status = 'Проверка pp-client';
     });
 
-    final binary =
-        await _ppClient.inspect(preferredPath: _settings.binaryPath);
+    final binary = await _ppClient.inspect(preferredPath: _settings.binaryPath);
     ReleaseInfo? release;
     ReleaseInfo? guiRelease;
     try {
@@ -144,9 +144,8 @@ class _AppShellState extends State<AppShell> {
 
     ProfileRef? selected;
     if (preserveSelection && _selectedProfile != null) {
-      selected = deduplicated
-          .where((p) => p.id == _selectedProfile!.id)
-          .firstOrNull;
+      selected =
+          deduplicated.where((p) => p.id == _selectedProfile!.id).firstOrNull;
     }
     // Restore from settings if no explicit selection.
     if (selected == null && _settings.selectedProfileId != null) {
@@ -223,6 +222,7 @@ class _AppShellState extends State<AppShell> {
       _tunnelState = TunnelState.starting;
       _serverConnected = false;
       _stopRequested = false;
+      _adminElevationStarted = false;
       _status = 'Запуск';
     });
 
@@ -248,30 +248,43 @@ class _AppShellState extends State<AppShell> {
         if (!mounted) return;
         _appendLog('pp-client завершился с кодом $code');
         final wasConnected = _serverConnected;
+        final stopRequested = _stopRequested;
+        final adminElevationStarted = _adminElevationStarted;
+        
         setState(() {
           _clientProcess = null;
           _serverConnected = false;
-          if (_stopRequested) {
+          _stopRequested = false;
+          _adminElevationStarted = false;
+
+          if (stopRequested) {
             _tunnelState = TunnelState.stopped;
             _status = 'Остановлено';
+          } else if (Platform.isWindows && adminElevationStarted && code == 0 && !wasConnected) {
+            // This was likely the intermediate elevation process finishing,
+            // but the actual client should still be running and tracked via the process wrapper.
+            // If we are here and not connected, it might mean the elevation process returned 0
+            // but we are still waiting for logs or connection.
+            _appendLog('процесс повышения прав завершен, ожидание подключения...');
           } else if (wasConnected && code == 0) {
             _tunnelState = TunnelState.stopped;
             _status = 'Отключено';
-          } else if (wasConnected && code != 0) {
+          } else if (code != 0) {
             _tunnelState = TunnelState.error;
-            _status = 'Соединение потеряно (код $code)';
+            _status = wasConnected ? 'Соединение потеряно (код $code)' : 'Ошибка запуска (код $code)';
           } else {
-            _tunnelState = TunnelState.error;
-            _status = 'Не удалось подключиться к серверу';
+            _tunnelState = TunnelState.stopped;
+            _status = 'Завершено';
           }
-          _stopRequested = false;
         });
+
         // Safety cleanup on unexpected crash.
-        if (!_stopRequested && _binary != null && _binary!.installed) {
+        if (!stopRequested && _binary != null && _binary!.installed) {
           _appendLog('аварийная очистка full-tunnel');
           await _ppClient.fullTunnelDown(_binary!);
         }
       }));
+
     } on Object catch (e) {
       _appendLog('ошибка запуска: $e');
       setState(() {
@@ -282,6 +295,9 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _stopClient() async {
+    if (_tunnelState == TunnelState.stopping) return;
+
+    _appendLog('запрос на остановку туннеля...');
     setState(() {
       _tunnelState = TunnelState.stopping;
       _stopRequested = true;
@@ -290,18 +306,36 @@ class _AppShellState extends State<AppShell> {
 
     final process = _clientProcess;
     if (process != null) {
-      await _ppClient.stop(process,
-          profile: _selectedProfile, binary: _binary);
+      try {
+        _appendLog('завершение процесса pid=${process.pid}...');
+        await _ppClient
+            .stop(process, profile: _selectedProfile, binary: _binary)
+            .timeout(const Duration(seconds: 10));
+        _appendLog('процесс и сеть очищены');
+      } on Object catch (e) {
+        _appendLog('ошибка при остановке: $e');
+      }
+    } else {
+      _appendLog('процесс не найден, попытка аварийной очистки сети...');
+      if (_binary != null && _binary!.installed) {
+        await _ppClient.fullTunnelDown(_binary!);
+        _appendLog('сеть очищена (аварийно)');
+      }
     }
 
-    await Future<void>.delayed(const Duration(milliseconds: 300));
-    if (mounted && _clientProcess == null) {
+
+
+    // Force UI update if process didn't exit by itself
+    if (mounted) {
       setState(() {
+        _clientProcess = null;
+        _serverConnected = false;
         _tunnelState = TunnelState.stopped;
         _status = 'Остановлено';
       });
     }
   }
+
 
   // ---------------------------------------------------------------------------
   // Test
@@ -388,17 +422,31 @@ class _AppShellState extends State<AppShell> {
     }
     setState(() {
       _updatingClient = true;
+      _installProgress = null;
       _status = 'Обновление pp-client';
     });
     try {
-      final result = await _ppClient.ppClientUpdate(binary);
-      _appendLog(result.ok
-          ? 'pp-client обновлён'
-          : 'ошибка обновления: ${result.combinedOutput}');
-      if (result.ok) {
+      final release = _latestRelease;
+      final asset = release?.assetForCurrentPlatform();
+      if (release != null && asset != null) {
+        final file =
+            await _installer.installAsset(asset, onProgress: (received, total) {
+          if (!mounted || total == null || total == 0) return;
+          setState(() {
+            _installProgress = received / total;
+          });
+        });
+        final nextSettings = _settings.copyWith(binaryPath: file.path);
+        await _settingsStore.save(nextSettings);
+        if (!mounted) return;
+        setState(() {
+          _settings = nextSettings;
+        });
+        _appendLog('pp-client обновлён в ${file.path}');
         await _refreshEverything();
       } else {
-        _showSnack('Ошибка обновления');
+        _appendLog('ошибка: не найден подходящий файл для обновления в релизе GitHub');
+        _showSnack('Файл обновления не найден в репозитории');
       }
     } on Object catch (e) {
       _appendLog('ошибка обновления: $e');
@@ -407,6 +455,7 @@ class _AppShellState extends State<AppShell> {
       if (mounted) {
         setState(() {
           _updatingClient = false;
+          _installProgress = null;
           _status = 'Готово';
         });
       }
@@ -459,6 +508,14 @@ class _AppShellState extends State<AppShell> {
     _appendLog(text);
     final normalized = line.toLowerCase();
     if (!mounted) return;
+    if (Platform.isWindows &&
+        normalized.contains('requesting administrator privileges')) {
+      setState(() {
+        _adminElevationStarted = true;
+        _status = 'Подтвердите запрос прав администратора';
+      });
+      return;
+    }
     if (normalized.contains(
         'browser noise pre-connect scenario completed successfully')) {
       setState(() {
@@ -475,14 +532,22 @@ class _AppShellState extends State<AppShell> {
       setState(() {
         _status = 'Локальный прокси запущен, подключение к серверу';
       });
-    } else if (normalized.contains('failed') ||
-        normalized.contains('error')) {
+    } else if (normalized.contains('failed') || normalized.contains('error')) {
+      if (normalized.contains('bind: only one usage of each socket address') ||
+          normalized.contains('address already in use')) {
+        setState(() {
+          _status = 'Ошибка: Порт уже занят другим приложением';
+        });
+        return;
+      }
       setState(() {
         _status = _serverConnected
             ? 'Клиент сообщил об ошибке'
             : 'Подключение к серверу продолжается';
       });
     }
+
+
   }
 
   void _appendLog(String line) {
@@ -505,10 +570,10 @@ class _AppShellState extends State<AppShell> {
   // ---------------------------------------------------------------------------
 
   bool get _hasUpdateBadge {
-    final clientUpdate = _latestRelease != null &&
-        _latestRelease!.isNewerThan(_binary?.version);
-    final guiUpdate = _latestGuiRelease != null &&
-        _latestGuiRelease!.isNewerThan(appVersion);
+    final clientUpdate =
+        _latestRelease != null && _latestRelease!.isNewerThan(_binary?.version);
+    final guiUpdate =
+        _latestGuiRelease != null && _latestGuiRelease!.isNewerThan(appVersion);
     return clientUpdate || guiUpdate;
   }
 
@@ -538,8 +603,7 @@ class _AppShellState extends State<AppShell> {
                       HomeScreen(
                         tunnelState: _tunnelState,
                         isProcessActive: _clientProcess != null,
-                        isConnected:
-                            _clientProcess != null && _serverConnected,
+                        isConnected: _clientProcess != null && _serverConnected,
                         binary: _binary,
                         selectedProfile: _selectedProfile,
                         profileListEmpty: _profileList.isEmpty,
@@ -608,13 +672,10 @@ class _AppShellState extends State<AppShell> {
               icon: Icon(Icons.power_settings_new), label: 'Главная'),
           const NavigationDestination(
               icon: Icon(Icons.dns_outlined), label: 'Конфиги'),
-          const NavigationDestination(
-              icon: Icon(Icons.subject), label: 'Логи'),
+          const NavigationDestination(icon: Icon(Icons.subject), label: 'Логи'),
           NavigationDestination(
             icon: _hasUpdateBadge
-                ? const Badge(
-                    smallSize: 8,
-                    child: Icon(Icons.info_outline))
+                ? const Badge(smallSize: 8, child: Icon(Icons.info_outline))
                 : const Icon(Icons.info_outline),
             label: 'О программе',
           ),

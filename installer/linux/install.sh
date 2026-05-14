@@ -5,7 +5,8 @@ set -e
 
 INSTALL_DIR="/opt/pp-gui"
 BIN_LINK="/usr/local/bin/pp-gui"
-DESKTOP_FILE="/usr/share/applications/pp-gui.desktop"
+APP_ID="dev.vakaka.pp_gui"
+DESKTOP_FILE="/usr/share/applications/${APP_ID}.desktop"
 ICON_DIR="/usr/share/icons/hicolor/512x512/apps"
 
 umask 022
@@ -55,7 +56,7 @@ echo "[5/5] Installing desktop files ..."
 mkdir -p "$ICON_DIR"
 if [ -f "$INSTALL_DIR/data/flutter_assets/assets/app_icon_512.png" ]; then
   cp "$INSTALL_DIR/data/flutter_assets/assets/app_icon_512.png" \
-     "$ICON_DIR/pp-gui.png"
+     "$ICON_DIR/${APP_ID}.png"
 fi
 
 cat > "$DESKTOP_FILE" <<EOF
@@ -66,11 +67,12 @@ Name=PP GUI
 GenericName=PP Protocol Client
 Comment=Graphical client for the PP protocol
 Exec=$INSTALL_DIR/pp_gui
-Icon=pp-gui
+Icon=$APP_ID
 Terminal=false
 Categories=Network;
 Keywords=vpn;proxy;pp;tunnel;
 StartupNotify=true
+StartupWMClass=$APP_ID
 EOF
 chmod 644 "$DESKTOP_FILE"
 

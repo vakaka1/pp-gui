@@ -57,10 +57,12 @@ class PpClientInstaller {
 
     final target = AppPaths.defaultInstallTarget();
     await target.parent.create(recursive: true);
-    final tempFile = File('${target.path}.download');
-    if (await tempFile.exists()) {
-      await tempFile.delete();
-    }
+
+    // PowerShell's Expand-Archive on Windows requires a .zip extension.
+    // We download to a temp directory to avoid path issues with special characters.
+    final isZip = asset.name.toLowerCase().endsWith('.zip');
+    final tempDir = await Directory.systemTemp.createTemp('pp-download-');
+    final tempFile = File('${tempDir.path}${Platform.pathSeparator}update${isZip ? '.zip' : '.bin'}');
 
     final client = HttpClient();
     try {
@@ -88,17 +90,19 @@ class PpClientInstaller {
         throw FileSystemException('Размер скачанного файла не совпадает с ожидаемым', tempFile.path);
       }
 
-      if (asset.name.toLowerCase().endsWith('.zip')) {
+      if (isZip) {
         // Handle ZIP archive (common for Windows releases)
         final extractDir = await Directory.systemTemp.createTemp('pp-client-extract-');
         try {
           if (Platform.isWindows) {
+            String psPath(String p) => "'${p.replaceAll("'", "''")}'";
             final result = await Process.run('powershell', [
               '-NoProfile',
               '-NonInteractive',
               '-Command',
-              'Expand-Archive -Force -Path "${tempFile.path}" -DestinationPath "${extractDir.path}"'
+              'Expand-Archive -Force -Path ${psPath(tempFile.path)} -DestinationPath ${psPath(extractDir.path)}'
             ]);
+
             if (result.exitCode != 0) {
               throw ProcessException('powershell', ['Expand-Archive'], result.stderr.toString(), result.exitCode);
             }
@@ -114,7 +118,11 @@ class PpClientInstaller {
           final files = await extractDir.list(recursive: true).toList();
           final binary = files.whereType<File>().where((f) {
             final name = f.path.split(Platform.pathSeparator).last.toLowerCase();
-            return name == 'pp-client.exe' || name == 'pp-client';
+            if (Platform.isWindows) {
+              return name.startsWith('pp-client') && name.endsWith('.exe');
+            }
+            // On Linux, look for 'pp-client' exactly or something starting with it and no extension
+            return name == 'pp-client' || (name.startsWith('pp-client') && !name.contains('.'));
           }).firstOrNull;
 
           if (binary == null) {
@@ -144,9 +152,11 @@ class PpClientInstaller {
       return target;
     } finally {
       client.close(force: true);
-      if (await tempFile.exists()) {
-        await tempFile.delete();
-      }
+      try {
+        if (await tempDir.exists()) {
+          await tempDir.delete(recursive: true);
+        }
+      } on Object {/* ignore */}
     }
   }
 }
