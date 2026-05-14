@@ -93,12 +93,24 @@ jobs:
         run: flutter build windows --release
 
       # ---- Archive (.zip) — used by in-app GUI auto-update ------------------
-      - name: Package zip (in-app update)
+      - name: Package zip (Portable / In-app update)
         shell: pwsh
         run: |
+          $bundleDir = "build\windows\x64\runner\Release"
+          $readmePath = "$bundleDir\README.txt"
+          $readmeContent = @"
+Это портативная версия PP GUI.
+Для запуска просто распакуйте все файлы в любую папку и запустите pp_gui.exe.
+
+ВАЖНО: Если программа не запускается, возможно вам нужно установить
+Microsoft Visual C++ 2015-2022 Redistributable (x64).
+Вы можете скачать его здесь: https://aka.ms/vs/17/release/vc_redist.x64.exe
+"@
+          $readmeContent | Out-File -FilePath $readmePath -Encoding utf8
+          
           Compress-Archive `
-            -Path build\windows\x64\runner\Release\* `
-            -DestinationPath "pp-gui-${{ github.ref_name }}-windows.zip"
+            -Path "$bundleDir\*" `
+            -DestinationPath "pp-gui-${{ github.ref_name }}-windows-portable.zip"
 
       # ---- Inno Setup .exe installer ----------------------------------------
       - name: Prepare Inno Setup bundle directory
@@ -124,7 +136,7 @@ jobs:
         with:
           name: windows-build
           path: |
-            pp-gui-${{ github.ref_name }}-windows.zip
+            pp-gui-${{ github.ref_name }}-windows-portable.zip
             pp-gui-${{ github.ref_name }}-windows-setup.exe
 
   # ---------------------------------------------------------------------------
@@ -169,4 +181,4 @@ jobs:
             "artifacts/pp-gui-${{ github.ref_name }}-linux.bin#Linux Installer (.bin)" \
             "artifacts/pp-gui-${{ github.ref_name }}-linux.tar.gz#Linux Archive (in-app update)" \
             "artifacts/pp-gui-${{ github.ref_name }}-windows-setup.exe#Windows Installer (.exe)" \
-            "artifacts/pp-gui-${{ github.ref_name }}-windows.zip#Windows Archive (in-app update)"
+            "artifacts/pp-gui-${{ github.ref_name }}-windows-portable.zip#Windows Portable Archive (.zip)"
