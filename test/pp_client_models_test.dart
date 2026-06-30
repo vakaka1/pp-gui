@@ -23,6 +23,12 @@ Commit: 1f3592b45b3b1c17683e0f0c7ea5d9684ae4acd1
     expect(compareSemverTags('v1.1.0', 'v1.0.99'), greaterThan(0));
   });
 
+  test('учитывает prerelease-суффиксы в тегах релизов', () {
+    expect(compareSemverTags('v1.0.44-rc2', 'v1.0.44-rc1'), greaterThan(0));
+    expect(compareSemverTags('v1.0.44', 'v1.0.44-rc2'), greaterThan(0));
+    expect(compareSemverTags('v1.0.45-rc1', 'v1.0.44'), greaterThan(0));
+  });
+
   test('создаёт клиентскую конфигурацию из ppf uri', () {
     final draft = ClientConfigDraft.fromPpfUri(
         'ppf://office@example.com:443?pub=PUB&psk=PSK&path=/grpc&fp=chrome');

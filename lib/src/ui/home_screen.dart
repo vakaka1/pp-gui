@@ -91,7 +91,9 @@ class HomeScreen extends StatelessWidget {
                     ),
                   ),
                   child: Icon(
-                    isProcessActive ? Icons.stop_rounded : Icons.power_settings_new_rounded,
+                    isProcessActive
+                        ? Icons.stop_rounded
+                        : Icons.power_settings_new_rounded,
                     size: 54,
                     color: enabled ? buttonColor : PpColors.textDim,
                   ),
@@ -160,8 +162,7 @@ class HomeScreen extends StatelessWidget {
                   selectedProfile!.isManaged
                       ? 'Профиль приложения'
                       : 'Профиль pp-client',
-                  style:
-                      const TextStyle(color: PpColors.textDim, fontSize: 13),
+                  style: const TextStyle(color: PpColors.textDim, fontSize: 13),
                 ),
                 if (selectedProfile!.path != null) ...[
                   const SizedBox(height: 8),
@@ -169,6 +170,25 @@ class HomeScreen extends StatelessWidget {
                     selectedProfile!.path!,
                     style:
                         const TextStyle(color: PpColors.textDim, fontSize: 11),
+                  ),
+                ],
+                if (_serverAddress(selectedProfile!) != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      const Icon(Icons.dns_outlined,
+                          size: 12, color: PpColors.textDim),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          _serverAddress(selectedProfile!)!,
+                          style: const TextStyle(
+                              color: PpColors.textDim, fontSize: 11),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
                 if (testResult != null) ...[
@@ -190,17 +210,32 @@ class HomeScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(r.ok ? Icons.check_circle_outline : Icons.error_outline,
-              color: color, size: 18),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              r.summary,
-              style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
-            ),
+          Row(
+            children: [
+              Icon(r.ok ? Icons.check_circle_outline : Icons.error_outline,
+                  color: color, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  r.summary,
+                  style: TextStyle(
+                      color: color, fontSize: 13, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
           ),
+          if (!r.ok && r.error != null && r.error!.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              r.error!,
+              style: const TextStyle(color: PpColors.textDim, fontSize: 11),
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
         ],
       ),
     );
@@ -222,5 +257,19 @@ class HomeScreen extends StatelessWidget {
       TunnelState.error => PpColors.red,
       TunnelState.stopped => PpColors.textDim,
     };
+  }
+
+  String? _serverAddress(ProfileRef profile) {
+    final client = profile.metadata['client'];
+    if (client is Map<String, dynamic>) {
+      final server = client['server'];
+      if (server is Map<String, dynamic>) {
+        final address = server['address']?.toString().trim();
+        if (address != null && address.isNotEmpty) return address;
+      }
+    }
+    final address = profile.metadata['server_address']?.toString().trim() ??
+        profile.metadata['address']?.toString().trim();
+    return address == null || address.isEmpty ? null : address;
   }
 }

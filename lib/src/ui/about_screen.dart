@@ -9,6 +9,7 @@ class AboutScreen extends StatelessWidget {
     super.key,
     required this.binary,
     required this.latestClientRelease,
+    required this.latestStableClientRelease,
     required this.latestGuiRelease,
     required this.installing,
     required this.installProgress,
@@ -18,6 +19,7 @@ class AboutScreen extends StatelessWidget {
     required this.guiUpdateProgress,
     required this.onInstallClient,
     required this.onUpdateClient,
+    required this.onRollbackClient,
     required this.onSelectUpdateChannel,
     required this.onUpdateGui,
     required this.onRefresh,
@@ -25,6 +27,7 @@ class AboutScreen extends StatelessWidget {
 
   final PpBinaryInfo? binary;
   final ReleaseInfo? latestClientRelease;
+  final ReleaseInfo? latestStableClientRelease;
   final ReleaseInfo? latestGuiRelease;
   final bool installing;
   final double? installProgress;
@@ -34,6 +37,7 @@ class AboutScreen extends StatelessWidget {
   final double? guiUpdateProgress;
   final VoidCallback? onInstallClient;
   final VoidCallback? onUpdateClient;
+  final VoidCallback? onRollbackClient;
   final ValueChanged<UpdateChannel>? onSelectUpdateChannel;
   final VoidCallback? onUpdateGui;
   final VoidCallback onRefresh;
@@ -172,9 +176,15 @@ class AboutScreen extends StatelessWidget {
 
   Widget _clientUpdatePanel() {
     final latest = latestClientRelease;
+    final latestStable = latestStableClientRelease;
     final updateAvailable =
         latest != null && latest.isNewerThan(binary?.version);
     final notInstalled = binary?.installed != true;
+    final rollbackAvailable = binary?.installed == true &&
+        binary?.updateChannel == UpdateChannel.prerelease &&
+        (binary?.version?.contains('-') ?? false) &&
+        latestStable != null &&
+        latestStable.assetForCurrentPlatform() != null;
     final stateText = notInstalled
         ? 'Не установлен'
         : updateAvailable
@@ -196,6 +206,7 @@ class AboutScreen extends StatelessWidget {
               binary?.installed == true ? 'доступен' : 'не найден'),
           InfoRow('Текущая', binary?.displayVersion ?? 'не установлена'),
           InfoRow('Последняя', latest?.tagName ?? 'неизвестно'),
+          if (rollbackAvailable) InfoRow('Стабильная', latestStable.tagName),
           if (binary?.installed == true) ...[
             const SizedBox(height: 8),
             _updateChannelSelector(),
@@ -224,6 +235,17 @@ class AboutScreen extends StatelessWidget {
                         updatingClient || installing ? null : onUpdateClient,
                     icon: const Icon(Icons.system_update_alt, size: 18),
                     label: const Text('Обновить'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+              ],
+              if (rollbackAvailable) ...[
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed:
+                        updatingClient || installing ? null : onRollbackClient,
+                    icon: const Icon(Icons.undo, size: 18),
+                    label: const Text('Откатить'),
                   ),
                 ),
                 const SizedBox(width: 8),

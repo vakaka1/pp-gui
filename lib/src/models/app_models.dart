@@ -542,27 +542,73 @@ class AppSettings {
 }
 
 int compareSemverTags(String left, String right) {
-  final a = _tagParts(left);
-  final b = _tagParts(right);
+  final a = _SemverTag.parse(left);
+  final b = _SemverTag.parse(right);
   for (var i = 0; i < 3; i += 1) {
-    final delta = a[i].compareTo(b[i]);
+    final delta = a.core[i].compareTo(b.core[i]);
     if (delta != 0) {
       return delta;
     }
   }
+
+  if (a.prerelease.isEmpty && b.prerelease.isEmpty) return 0;
+  if (a.prerelease.isEmpty) return 1;
+  if (b.prerelease.isEmpty) return -1;
+
+  final length = a.prerelease.length > b.prerelease.length
+      ? a.prerelease.length
+      : b.prerelease.length;
+  for (var i = 0; i < length; i += 1) {
+    if (i >= a.prerelease.length) return -1;
+    if (i >= b.prerelease.length) return 1;
+
+    final leftPart = a.prerelease[i];
+    final rightPart = b.prerelease[i];
+    final leftNumber = int.tryParse(leftPart);
+    final rightNumber = int.tryParse(rightPart);
+
+    if (leftNumber != null && rightNumber != null) {
+      final delta = leftNumber.compareTo(rightNumber);
+      if (delta != 0) return delta;
+      continue;
+    }
+    if (leftNumber != null) return -1;
+    if (rightNumber != null) return 1;
+
+    final delta = leftPart.compareTo(rightPart);
+    if (delta != 0) return delta;
+  }
   return 0;
 }
 
-List<int> _tagParts(String tag) {
-  final normalized = tag.trim().replaceFirst(RegExp(r'^[vV]'), '');
-  final pieces = normalized.split('.');
-  return List<int>.generate(3, (index) {
-    if (index >= pieces.length) {
-      return 0;
-    }
-    return int.tryParse(pieces[index].replaceAll(RegExp(r'[^0-9].*$'), '')) ??
-        0;
-  });
+class _SemverTag {
+  const _SemverTag(this.core, this.prerelease);
+
+  final List<int> core;
+  final List<String> prerelease;
+
+  static _SemverTag parse(String tag) {
+    final normalized =
+        tag.trim().replaceFirst(RegExp(r'^[vV]'), '').split('+').first;
+    final prereleaseStart = normalized.indexOf('-');
+    final coreText = prereleaseStart == -1
+        ? normalized
+        : normalized.substring(0, prereleaseStart);
+    final prereleaseText =
+        prereleaseStart == -1 ? '' : normalized.substring(prereleaseStart + 1);
+    final corePieces = coreText.split('.');
+    final core = List<int>.generate(3, (index) {
+      if (index >= corePieces.length) return 0;
+      return int.tryParse(
+              corePieces[index].replaceAll(RegExp(r'[^0-9].*$'), '')) ??
+          0;
+    });
+    final prerelease = prereleaseText
+        .split(RegExp(r'[.-]'))
+        .where((part) => part.isNotEmpty)
+        .toList(growable: false);
+    return _SemverTag(core, prerelease);
+  }
 }
 
 String _fileStem(String path) {

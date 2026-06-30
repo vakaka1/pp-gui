@@ -35,6 +35,7 @@ class _AppShellState extends State<AppShell> {
   AppSettings _settings = AppSettings.defaults();
   PpBinaryInfo? _binary;
   ReleaseInfo? _latestRelease;
+  ReleaseInfo? _latestStableRelease;
   ReleaseInfo? _latestGuiRelease;
   List<ProfileRef> _profileList = const [];
   ProfileRef? _selectedProfile;
@@ -96,11 +97,15 @@ class _AppShellState extends State<AppShell> {
 
     final binary = await _ppClient.inspect(preferredPath: _settings.binaryPath);
     ReleaseInfo? release;
+    ReleaseInfo? stableRelease;
     ReleaseInfo? guiRelease;
     try {
       release = await _releases.fetchLatestRelease(
         includePrerelease: binary.updateChannel == UpdateChannel.prerelease,
       );
+      stableRelease = binary.updateChannel == UpdateChannel.prerelease
+          ? await _releases.fetchLatestRelease()
+          : release;
     } on Object catch (e) {
       _appendLog('не удалось проверить обновления pp-client: $e');
     }
@@ -114,6 +119,7 @@ class _AppShellState extends State<AppShell> {
     setState(() {
       _binary = binary;
       _latestRelease = release;
+      _latestStableRelease = stableRelease;
       _latestGuiRelease = guiRelease;
       _status = binary.installed ? 'Готово' : 'pp-client не найден';
       _loading = false;
@@ -424,6 +430,50 @@ class _AppShellState extends State<AppShell> {
   }
 
   Future<void> _updateClient() async {
+    await _installClientRelease(
+      _latestRelease,
+      busyStatus: 'Обновление pp-client',
+      logMessage: 'pp-client обновлён',
+      missingAssetMessage: 'Файл обновления не найден в репозитории',
+    );
+  }
+
+  Future<void> _rollbackClientToStable() async {
+    final binary = _binary;
+    if (binary == null || !binary.installed) {
+      _showSnack('pp-client не установлен');
+      return;
+    }
+    if (binary.canSelectUpdateChannel) {
+      try {
+        final result =
+            await _ppClient.selectUpdateChannel(binary, UpdateChannel.stable);
+        if (!result.ok) {
+          throw ProcessException(
+              binary.path!,
+              ['choice', UpdateChannel.stable.clientValue],
+              result.combinedOutput,
+              result.exitCode);
+        }
+        _appendLog('pp-client update channel: stable');
+      } on Object catch (e) {
+        _appendLog('не удалось переключить ветку на стабильную: $e');
+      }
+    }
+    await _installClientRelease(
+      _latestStableRelease,
+      busyStatus: 'Откат pp-client',
+      logMessage: 'pp-client откатан',
+      missingAssetMessage: 'Стабильный файл обновления не найден',
+    );
+  }
+
+  Future<void> _installClientRelease(
+    ReleaseInfo? release, {
+    required String busyStatus,
+    required String logMessage,
+    required String missingAssetMessage,
+  }) async {
     final binary = _binary;
     if (binary == null || !binary.installed) {
       _showSnack('pp-client не установлен');
@@ -432,10 +482,9 @@ class _AppShellState extends State<AppShell> {
     setState(() {
       _updatingClient = true;
       _installProgress = null;
-      _status = 'Обновление pp-client';
+      _status = busyStatus;
     });
     try {
-      final release = _latestRelease;
       final asset = release?.assetForCurrentPlatform();
       if (release != null && asset != null) {
         final file =
@@ -451,12 +500,11 @@ class _AppShellState extends State<AppShell> {
         setState(() {
           _settings = nextSettings;
         });
-        _appendLog('pp-client обновлён в ${file.path}');
+        _appendLog('$logMessage в ${file.path}');
         await _refreshEverything();
       } else {
-        _appendLog(
-            'ошибка: не найден подходящий файл для обновления в релизе GitHub');
-        _showSnack('Файл обновления не найден в репозитории');
+        _appendLog('ошибка: не найден подходящий файл в релизе GitHub');
+        _showSnack(missingAssetMessage);
       }
     } on Object catch (e) {
       _appendLog('ошибка обновления: $e');
@@ -734,6 +782,7 @@ class _AppShellState extends State<AppShell> {
                       AboutScreen(
                         binary: _binary,
                         latestClientRelease: _latestRelease,
+                        latestStableClientRelease: _latestStableRelease,
                         latestGuiRelease: _latestGuiRelease,
                         installing: _installing,
                         installProgress: _installProgress,
@@ -743,6 +792,7 @@ class _AppShellState extends State<AppShell> {
                         guiUpdateProgress: _guiUpdateProgress,
                         onInstallClient: _installLatestClient,
                         onUpdateClient: _updateClient,
+                        onRollbackClient: _rollbackClientToStable,
                         onSelectUpdateChannel: _selectUpdateChannel,
                         onUpdateGui: _updateGui,
                         onRefresh: _refreshEverything,
