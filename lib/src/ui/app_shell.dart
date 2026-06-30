@@ -478,10 +478,6 @@ class _AppShellState extends State<AppShell> {
       _showSnack('pp-client не установлен');
       return;
     }
-    if (!binary.canSelectUpdateChannel) {
-      _showSnack('Ваш pp-client не поддерживает выбор ветки обновлений');
-      return;
-    }
     setState(() {
       _changingUpdateChannel = true;
     });

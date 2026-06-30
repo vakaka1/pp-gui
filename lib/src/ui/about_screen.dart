@@ -124,7 +124,7 @@ class AboutScreen extends StatelessWidget {
 
   Widget _updateChannelSelector() {
     final current = binary?.updateChannel ?? UpdateChannel.stable;
-    final enabled = binary?.canSelectUpdateChannel == true &&
+    final enabled = binary?.installed == true &&
         !installing &&
         !updatingClient &&
         !changingUpdateChannel;
@@ -164,12 +164,6 @@ class AboutScreen extends StatelessWidget {
         if (changingUpdateChannel) ...[
           const SizedBox(height: 8),
           const LinearProgressIndicator(),
-        ] else if (binary?.canSelectUpdateChannel != true) ...[
-          const SizedBox(height: 6),
-          const Text(
-            'Обновите pp-client, чтобы выбирать ветку обновлений.',
-            style: TextStyle(color: PpColors.textDim, fontSize: 12),
-          ),
         ],
         const SizedBox(height: 8),
       ],
@@ -206,7 +200,6 @@ class AboutScreen extends StatelessWidget {
             const SizedBox(height: 8),
             _updateChannelSelector(),
           ],
-          if (binary?.path != null) InfoRow('Путь', binary!.path!),
           if (binary?.error != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
