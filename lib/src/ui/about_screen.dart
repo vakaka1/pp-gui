@@ -13,10 +13,12 @@ class AboutScreen extends StatelessWidget {
     required this.installing,
     required this.installProgress,
     required this.updatingClient,
+    required this.changingUpdateChannel,
     required this.updatingGui,
     required this.guiUpdateProgress,
     required this.onInstallClient,
     required this.onUpdateClient,
+    required this.onSelectUpdateChannel,
     required this.onUpdateGui,
     required this.onRefresh,
   });
@@ -27,10 +29,12 @@ class AboutScreen extends StatelessWidget {
   final bool installing;
   final double? installProgress;
   final bool updatingClient;
+  final bool changingUpdateChannel;
   final bool updatingGui;
   final double? guiUpdateProgress;
   final VoidCallback? onInstallClient;
   final VoidCallback? onUpdateClient;
+  final ValueChanged<UpdateChannel>? onSelectUpdateChannel;
   final VoidCallback? onUpdateGui;
   final VoidCallback onRefresh;
 
@@ -57,7 +61,8 @@ class AboutScreen extends StatelessWidget {
           const Text(
             'PP GUI — эталонное графическое приложение для работы и проверки протокола PP. '
             'Предназначено для тестирования, демонстрации и повседневного использования PP-клиента.',
-            style: TextStyle(color: PpColors.textDim, height: 1.4, fontSize: 13),
+            style:
+                TextStyle(color: PpColors.textDim, height: 1.4, fontSize: 13),
           ),
           const SizedBox(height: 10),
           InfoRow('Версия GUI', 'v$appVersion'),
@@ -69,10 +74,10 @@ class AboutScreen extends StatelessWidget {
   }
 
   Widget _guiUpdatePanel() {
-    final hasGuiUpdate = latestGuiRelease != null &&
-        latestGuiRelease!.isNewerThan(appVersion);
-    final canUpdate = hasGuiUpdate &&
-        latestGuiRelease!.assetForCurrentGuiPlatform() != null;
+    final hasGuiUpdate =
+        latestGuiRelease != null && latestGuiRelease!.isNewerThan(appVersion);
+    final canUpdate =
+        hasGuiUpdate && latestGuiRelease!.assetForCurrentGuiPlatform() != null;
     final stateText = hasGuiUpdate ? 'Есть обновление' : 'Актуально';
     final stateColor = hasGuiUpdate ? PpColors.orange : PpColors.green;
 
@@ -89,8 +94,8 @@ class AboutScreen extends StatelessWidget {
             const Text(
               'Новая версия PP GUI доступна. Нажмите «Обновить» — '
               'приложение скачает обновление и перезапустится автоматически.',
-              style: TextStyle(
-                  color: PpColors.textDim, fontSize: 12, height: 1.4),
+              style:
+                  TextStyle(color: PpColors.textDim, fontSize: 12, height: 1.4),
             ),
           ],
           if (updatingGui) ...[
@@ -101,8 +106,7 @@ class AboutScreen extends StatelessWidget {
               guiUpdateProgress != null
                   ? 'Загрузка ${(guiUpdateProgress! * 100).toStringAsFixed(0)}%…'
                   : 'Применение обновления…',
-              style:
-                  const TextStyle(color: PpColors.textDim, fontSize: 11),
+              style: const TextStyle(color: PpColors.textDim, fontSize: 11),
             ),
           ],
           if (canUpdate) ...[
@@ -115,6 +119,60 @@ class AboutScreen extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+
+  Widget _updateChannelSelector() {
+    final current = binary?.updateChannel ?? UpdateChannel.stable;
+    final enabled = binary?.canSelectUpdateChannel == true &&
+        !installing &&
+        !updatingClient &&
+        !changingUpdateChannel;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Ветка обновлений',
+          style: TextStyle(
+            color: PpColors.textDim,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 6),
+        SegmentedButton<UpdateChannel>(
+          segments: UpdateChannel.values
+              .map(
+                (channel) => ButtonSegment<UpdateChannel>(
+                  value: channel,
+                  label: Text(channel.label),
+                ),
+              )
+              .toList(growable: false),
+          selected: {current},
+          showSelectedIcon: false,
+          onSelectionChanged: enabled
+              ? (selection) {
+                  final selected = selection.first;
+                  if (selected != current) {
+                    onSelectUpdateChannel?.call(selected);
+                  }
+                }
+              : null,
+        ),
+        if (changingUpdateChannel) ...[
+          const SizedBox(height: 8),
+          const LinearProgressIndicator(),
+        ] else if (binary?.canSelectUpdateChannel != true) ...[
+          const SizedBox(height: 6),
+          const Text(
+            'Обновите pp-client, чтобы выбирать ветку обновлений.',
+            style: TextStyle(color: PpColors.textDim, fontSize: 12),
+          ),
+        ],
+        const SizedBox(height: 8),
+      ],
     );
   }
 
@@ -144,13 +202,16 @@ class AboutScreen extends StatelessWidget {
               binary?.installed == true ? 'доступен' : 'не найден'),
           InfoRow('Текущая', binary?.displayVersion ?? 'не установлена'),
           InfoRow('Последняя', latest?.tagName ?? 'неизвестно'),
+          if (binary?.installed == true) ...[
+            const SizedBox(height: 8),
+            _updateChannelSelector(),
+          ],
           if (binary?.path != null) InfoRow('Путь', binary!.path!),
           if (binary?.error != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(binary!.error!,
-                  style:
-                      const TextStyle(color: PpColors.red, fontSize: 12)),
+                  style: const TextStyle(color: PpColors.red, fontSize: 12)),
             ),
           if (installing) ...[
             const SizedBox(height: 10),

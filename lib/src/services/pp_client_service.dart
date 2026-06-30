@@ -141,11 +141,8 @@ public class Launcher {
 }
 ''';
 
-
-    await scriptFile.writeAsBytes(
-        [0xEF, 0xBB, 0xBF, ...utf8.encode(scriptContent)]);
-
-
+    await scriptFile
+        .writeAsBytes([0xEF, 0xBB, 0xBF, ...utf8.encode(scriptContent)]);
 
     await Process.run(
       'powershell.exe',
@@ -160,7 +157,6 @@ public class Launcher {
       ],
       runInShell: false,
     );
-
 
     final pid = await _waitForPid(pidFile);
     final exitCompleter = Completer<int>();
@@ -195,7 +191,6 @@ public class Launcher {
       }));
     }));
 
-
     return _WindowsElevatedPpClientProcess._(
       pid: pid,
       stdout: stdoutController.stream,
@@ -211,7 +206,6 @@ public class Launcher {
         }
       },
     );
-
   }
 
   static Future<int> _waitForPid(File pidFile) async {
@@ -284,6 +278,7 @@ class PpClientService {
         buildDate: null,
         commit: null,
         capabilities: {},
+        updateChannel: UpdateChannel.stable,
         error: 'pp-client не найден в PATH или стандартных местах установки',
       );
     }
@@ -297,6 +292,7 @@ class PpClientService {
         buildDate: null,
         commit: null,
         capabilities: {},
+        updateChannel: await readUpdateChannel(),
         error:
             'Файл не является корректным исполняемым файлом Windows (возможно, поврежден или это архив)',
       );
@@ -333,6 +329,9 @@ class PpClientService {
       if (_hasCommand(help.stdout, 'delete')) {
         capabilities.add(PpCapability.deleteProfile);
       }
+      if (_hasCommand(help.stdout, 'choice')) {
+        capabilities.add(PpCapability.updateChoice);
+      }
     }
 
     final startHelp = await runCommand(resolvedPath, const ['start', '--help']);
@@ -346,6 +345,7 @@ class PpClientService {
       buildDate: buildDate,
       commit: commit,
       capabilities: capabilities,
+      updateChannel: await readUpdateChannel(),
       error: error,
     );
   }
@@ -483,6 +483,24 @@ class PpClientService {
         timeout: const Duration(seconds: 120));
   }
 
+  Future<UpdateChannel> readUpdateChannel() async {
+    final file = AppPaths.updateChannelFile;
+    try {
+      if (!await file.exists()) return UpdateChannel.stable;
+      return UpdateChannelLabels.fromStorageValue(await file.readAsString());
+    } on Object {
+      return UpdateChannel.stable;
+    }
+  }
+
+  Future<CommandResult> selectUpdateChannel(
+    PpBinaryInfo binary,
+    UpdateChannel channel,
+  ) {
+    return runCommand(binary.path!, ['choice', channel.clientValue],
+        timeout: const Duration(seconds: 20));
+  }
+
   Future<List<ProfileRef>> listProfiles(PpBinaryInfo binary) async {
     if (!binary.canListProfiles || binary.path == null) {
       return const [];
@@ -592,15 +610,14 @@ class PpClientService {
         'do shell script "pkill -INT -f pp-client.*start.*--full-tunnel" with administrator privileges'
       ]);
     } else if (Platform.isWindows) {
-      // For Windows, the 'process.pid' might be the PID of the elevated launcher, 
+      // For Windows, the 'process.pid' might be the PID of the elevated launcher,
       // not the actual client. We must ensure we use the correct PID if available.
       // The taskkill /F /T will handle the entire tree.
       final pid = process.pid;
-      _appendDiagnosticLog('Stopping Windows process tree for PID \$pid...');
-      await Process.run('taskkill', ['/F', '/T', '/PID', '\$pid']);
+      _appendDiagnosticLog('Stopping Windows process tree for PID $pid...');
+      await Process.run('taskkill', ['/F', '/T', '/PID', '$pid']);
       process.kill(); // Final safety
     } else {
-
       process.kill();
     }
 
@@ -613,13 +630,11 @@ class PpClientService {
     }
   }
 
-
   void _appendDiagnosticLog(String message) {
     debugPrint('[PpClientService] \$message');
   }
 
   Future<CommandResult> runCommand(
-
     String executable,
     List<String> args, {
     Duration timeout = const Duration(seconds: 8),
@@ -735,8 +750,8 @@ Add-Type -TypeDefinition \$code
 Set-Content -LiteralPath ${psQuote(exitFile.path)} -Value \$exitCode -Encoding ascii
 ''';
 
-      await scriptFile.writeAsBytes(
-          [0xEF, 0xBB, 0xBF, ...utf8.encode(scriptContent)]);
+      await scriptFile
+          .writeAsBytes([0xEF, 0xBB, 0xBF, ...utf8.encode(scriptContent)]);
 
       await Process.run(
         'powershell.exe',
@@ -751,7 +766,6 @@ Set-Content -LiteralPath ${psQuote(exitFile.path)} -Value \$exitCode -Encoding a
         ],
         runInShell: false,
       );
-
 
       final deadline = DateTime.now().add(timeout);
       while (!await exitFile.exists()) {

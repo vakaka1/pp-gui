@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 /// Current GUI application version (synced with pubspec.yaml).
-const String appVersion = '1.0.0';
+const String appVersion = '1.0.1';
 
 /// Result of `pp-client test` command.
 class TestResult {
@@ -46,6 +46,49 @@ enum PpCapability {
   listProfiles,
   deleteProfile,
   transparentListen,
+  updateChoice,
+}
+
+enum UpdateChannel {
+  stable,
+  prerelease,
+}
+
+extension UpdateChannelLabels on UpdateChannel {
+  String get clientValue {
+    switch (this) {
+      case UpdateChannel.stable:
+        return 'release';
+      case UpdateChannel.prerelease:
+        return 'prerelease';
+    }
+  }
+
+  String get storageValue {
+    switch (this) {
+      case UpdateChannel.stable:
+        return 'stable';
+      case UpdateChannel.prerelease:
+        return 'testing';
+    }
+  }
+
+  String get label {
+    switch (this) {
+      case UpdateChannel.stable:
+        return 'Стабильная';
+      case UpdateChannel.prerelease:
+        return 'Предрелизная';
+    }
+  }
+
+  static UpdateChannel fromStorageValue(String? value) {
+    final normalized = value?.trim().toLowerCase();
+    if (normalized == 'testing' || normalized == 'prerelease') {
+      return UpdateChannel.prerelease;
+    }
+    return UpdateChannel.stable;
+  }
 }
 
 enum TunnelState {
@@ -84,6 +127,7 @@ class PpBinaryInfo {
     required this.buildDate,
     required this.commit,
     required this.capabilities,
+    required this.updateChannel,
     required this.error,
   });
 
@@ -92,6 +136,7 @@ class PpBinaryInfo {
   final String? buildDate;
   final String? commit;
   final Set<PpCapability> capabilities;
+  final UpdateChannel updateChannel;
   final String? error;
 
   bool get installed => path != null && error == null;
@@ -102,6 +147,8 @@ class PpBinaryInfo {
       capabilities.contains(PpCapability.deleteProfile);
   bool get canTransparentListen =>
       capabilities.contains(PpCapability.transparentListen);
+  bool get canSelectUpdateChannel =>
+      capabilities.contains(PpCapability.updateChoice);
 
   String get displayVersion => version ?? 'неизвестно';
 }
@@ -168,10 +215,14 @@ class ReleaseInfo {
         final name = asset.name.toLowerCase();
         // Look for any windows binary or zip containing pp-client
         return name.contains('pp-client') &&
-            (name.contains('windows') || name.endsWith('.exe') || name.endsWith('.zip'));
+            (name.contains('windows') ||
+                name.endsWith('.exe') ||
+                name.endsWith('.zip'));
       }).toList();
       // Prefer ZIP if available, otherwise take the first EXE
-      return candidates.where((a) => a.name.toLowerCase().endsWith('.zip')).firstOrNull ??
+      return candidates
+              .where((a) => a.name.toLowerCase().endsWith('.zip'))
+              .firstOrNull ??
           candidates.firstOrNull;
     }
     return null;
@@ -184,13 +235,17 @@ class ReleaseInfo {
     if (Platform.isLinux) {
       return assets.where((a) {
         final n = a.name.toLowerCase();
-        return n.contains('pp-gui') && n.contains('linux') && n.endsWith('.tar.gz');
+        return n.contains('pp-gui') &&
+            n.contains('linux') &&
+            n.endsWith('.tar.gz');
       }).firstOrNull;
     }
     if (Platform.isWindows) {
       return assets.where((a) {
         final n = a.name.toLowerCase();
-        return n.contains('pp-gui') && n.contains('windows') && n.endsWith('.zip');
+        return n.contains('pp-gui') &&
+            n.contains('windows') &&
+            n.endsWith('.zip');
       }).firstOrNull;
     }
     return null;

@@ -21,6 +21,10 @@ class AppPaths {
     return File(_join(configDirectory.path, 'settings.json'));
   }
 
+  static File get updateChannelFile {
+    return File(_join(ppClientConfigDirectory.path, 'update-channel'));
+  }
+
   static File managedProfileFile(String profileName) {
     return File(
         _join(profilesDirectory.path, '${_safeProfileName(profileName)}.json'));

@@ -49,6 +49,7 @@ class _AppShellState extends State<AppShell> {
   bool _installing = false;
   bool _updatingClient = false;
   bool _updatingGui = false;
+  bool _changingUpdateChannel = false;
   bool _serverConnected = false;
   bool _stopRequested = false;
   bool _adminElevationStarted = false;
@@ -97,7 +98,9 @@ class _AppShellState extends State<AppShell> {
     ReleaseInfo? release;
     ReleaseInfo? guiRelease;
     try {
-      release = await _releases.fetchLatestRelease();
+      release = await _releases.fetchLatestRelease(
+        includePrerelease: binary.updateChannel == UpdateChannel.prerelease,
+      );
     } on Object catch (e) {
       _appendLog('не удалось проверить обновления pp-client: $e');
     }
@@ -254,7 +257,7 @@ class _AppShellState extends State<AppShell> {
         final wasConnected = _serverConnected;
         final stopRequested = _stopRequested;
         final adminElevationStarted = _adminElevationStarted;
-        
+
         setState(() {
           _clientProcess = null;
           _serverConnected = false;
@@ -264,18 +267,24 @@ class _AppShellState extends State<AppShell> {
           if (stopRequested) {
             _tunnelState = TunnelState.stopped;
             _status = 'Остановлено';
-          } else if (Platform.isWindows && adminElevationStarted && code == 0 && !wasConnected) {
+          } else if (Platform.isWindows &&
+              adminElevationStarted &&
+              code == 0 &&
+              !wasConnected) {
             // This was likely the intermediate elevation process finishing,
             // but the actual client should still be running and tracked via the process wrapper.
             // If we are here and not connected, it might mean the elevation process returned 0
             // but we are still waiting for logs or connection.
-            _appendLog('процесс повышения прав завершен, ожидание подключения...');
+            _appendLog(
+                'процесс повышения прав завершен, ожидание подключения...');
           } else if (wasConnected && code == 0) {
             _tunnelState = TunnelState.stopped;
             _status = 'Отключено';
           } else if (code != 0) {
             _tunnelState = TunnelState.error;
-            _status = wasConnected ? 'Соединение потеряно (код $code)' : 'Ошибка запуска (код $code)';
+            _status = wasConnected
+                ? 'Соединение потеряно (код $code)'
+                : 'Ошибка запуска (код $code)';
           } else {
             _tunnelState = TunnelState.stopped;
             _status = 'Завершено';
@@ -288,7 +297,6 @@ class _AppShellState extends State<AppShell> {
           await _ppClient.fullTunnelDown(_binary!);
         }
       }));
-
     } on Object catch (e) {
       _appendLog('ошибка запуска: $e');
       setState(() {
@@ -327,8 +335,6 @@ class _AppShellState extends State<AppShell> {
       }
     }
 
-
-
     // Force UI update if process didn't exit by itself
     if (mounted) {
       setState(() {
@@ -339,7 +345,6 @@ class _AppShellState extends State<AppShell> {
       });
     }
   }
-
 
   // ---------------------------------------------------------------------------
   // Test
@@ -449,7 +454,8 @@ class _AppShellState extends State<AppShell> {
         _appendLog('pp-client обновлён в ${file.path}');
         await _refreshEverything();
       } else {
-        _appendLog('ошибка: не найден подходящий файл для обновления в релизе GitHub');
+        _appendLog(
+            'ошибка: не найден подходящий файл для обновления в релизе GitHub');
         _showSnack('Файл обновления не найден в репозитории');
       }
     } on Object catch (e) {
@@ -461,6 +467,52 @@ class _AppShellState extends State<AppShell> {
           _updatingClient = false;
           _installProgress = null;
           _status = 'Готово';
+        });
+      }
+    }
+  }
+
+  Future<void> _selectUpdateChannel(UpdateChannel channel) async {
+    final binary = _binary;
+    if (binary == null || !binary.installed) {
+      _showSnack('pp-client не установлен');
+      return;
+    }
+    if (!binary.canSelectUpdateChannel) {
+      _showSnack('Ваш pp-client не поддерживает выбор ветки обновлений');
+      return;
+    }
+    setState(() {
+      _changingUpdateChannel = true;
+    });
+    try {
+      final result = await _ppClient.selectUpdateChannel(binary, channel);
+      if (!result.ok) {
+        throw ProcessException(binary.path!, ['choice', channel.clientValue],
+            result.combinedOutput, result.exitCode);
+      }
+      _appendLog('pp-client update channel: ${channel.storageValue}');
+      if (!mounted) return;
+      setState(() {
+        _binary = PpBinaryInfo(
+          path: binary.path,
+          version: binary.version,
+          buildDate: binary.buildDate,
+          commit: binary.commit,
+          capabilities: binary.capabilities,
+          updateChannel: channel,
+          error: binary.error,
+        );
+      });
+      _showSnack('Ветка обновлений: ${channel.label}');
+      await _refreshEverything();
+    } on Object catch (e) {
+      _appendLog('ошибка выбора ветки обновлений: $e');
+      _showSnack('Не удалось изменить ветку: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _changingUpdateChannel = false;
         });
       }
     }
@@ -690,10 +742,12 @@ class _AppShellState extends State<AppShell> {
                         installing: _installing,
                         installProgress: _installProgress,
                         updatingClient: _updatingClient,
+                        changingUpdateChannel: _changingUpdateChannel,
                         updatingGui: _updatingGui,
                         guiUpdateProgress: _guiUpdateProgress,
                         onInstallClient: _installLatestClient,
                         onUpdateClient: _updateClient,
+                        onSelectUpdateChannel: _selectUpdateChannel,
                         onUpdateGui: _updateGui,
                         onRefresh: _refreshEverything,
                       ),
