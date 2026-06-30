@@ -22,6 +22,12 @@ class AppPaths {
   }
 
   static File get updateChannelFile {
+    if (Platform.isWindows) {
+      final appData = Platform.environment['APPDATA'] ??
+          Platform.environment['USERPROFILE'] ??
+          '.';
+      return File(_join(_join(appData, 'pp'), 'update-channel'));
+    }
     return File(_join(ppClientConfigDirectory.path, 'update-channel'));
   }
 
