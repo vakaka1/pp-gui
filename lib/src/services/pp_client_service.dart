@@ -147,10 +147,6 @@ public class Launcher {
 
 
 
-    await scriptFile.writeAsBytes(
-        [0xEF, 0xBB, 0xBF, ...utf8.encode(scriptContent)]);
-
-
     await Process.run(
       'powershell.exe',
       [

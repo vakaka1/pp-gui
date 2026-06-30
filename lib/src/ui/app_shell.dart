@@ -174,6 +174,10 @@ class _AppShellState extends State<AppShell> {
     final next = _settings.copyWith(selectedProfileId: profile.id);
     _settings = next;
     unawaited(_settingsStore.save(next));
+    // Auto-run connection test for the newly selected profile.
+    if (_binary != null && _binary!.installed && _clientProcess == null) {
+      unawaited(_testSelectedProfile());
+    }
   }
 
   Future<void> _deleteSelected() async {
@@ -516,38 +520,76 @@ class _AppShellState extends State<AppShell> {
       });
       return;
     }
-    if (normalized.contains(
-        'browser noise pre-connect scenario completed successfully')) {
+
+    // --- Connection success patterns ---
+    // These match actual log messages emitted by pp-client:
+    //   - "browser noise pre-connect scenario completed successfully" (browser_noise.go:90)
+    //   - "connected to server successfully"                          (pool.go:71)
+    //   - "full-tunnel enabled"                                       (main.go:316)
+    final connectedPatterns = [
+      'browser noise pre-connect scenario completed successfully',
+      'connected to server successfully',
+      'full-tunnel enabled',
+    ];
+    if (connectedPatterns.any((p) => normalized.contains(p))) {
       setState(() {
         _serverConnected = true;
         _tunnelState = TunnelState.running;
         _status = 'Полный туннель подключён';
       });
-    } else if (normalized.contains('transparent proxy server started')) {
+      return;
+    }
+
+    if (normalized.contains('transparent proxy server started')) {
       setState(() {
         _status = 'Полный туннель запущен';
       });
-    } else if (normalized.contains('socks5 server started') ||
+      return;
+    }
+
+    if (normalized.contains('socks5 server started') ||
         normalized.contains('http proxy server started')) {
       setState(() {
         _status = 'Локальный прокси запущен, подключение к серверу';
       });
-    } else if (normalized.contains('failed') || normalized.contains('error')) {
-      if (normalized.contains('bind: only one usage of each socket address') ||
-          normalized.contains('address already in use')) {
-        setState(() {
-          _status = 'Ошибка: Порт уже занят другим приложением';
-        });
-        return;
-      }
+      return;
+    }
+
+    // --- Connection failure patterns ---
+    final failurePatterns = [
+      'connection refused',
+      'connection timed out',
+      'dial tcp',
+      'tls:',
+      'certificate',
+      'handshake failure',
+      'connect: no route to host',
+      'no such host',
+      'name resolution',
+    ];
+    if (failurePatterns.any((p) => normalized.contains(p))) {
+      setState(() {
+        _tunnelState = TunnelState.error;
+        _status = 'Ошибка подключения к серверу';
+      });
+      return;
+    }
+
+    if (normalized.contains('bind: only one usage of each socket address') ||
+        normalized.contains('address already in use')) {
+      setState(() {
+        _status = 'Ошибка: Порт уже занят другим приложением';
+      });
+      return;
+    }
+
+    if (normalized.contains('failed') || normalized.contains('error')) {
       setState(() {
         _status = _serverConnected
             ? 'Клиент сообщил об ошибке'
             : 'Подключение к серверу продолжается';
       });
     }
-
-
   }
 
   void _appendLog(String line) {
